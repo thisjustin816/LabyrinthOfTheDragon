@@ -2661,6 +2661,10 @@ void update_map(void) {
 }
 
 void update_world_map(void) NONBANKED {
+  // update_map() and everything under it is bank 2 code, and callers can
+  // arrive with any bank paged in, so page bank 2 in here.
+  SWITCH_ROM(MAP_SYSTEM_BANK);
+
   if (map_state == MAP_STATE_START_BATTLE) {
     if (!update_timer(battle_wait_timer))
       return;

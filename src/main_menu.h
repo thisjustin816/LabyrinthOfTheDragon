@@ -53,6 +53,15 @@ void draw_main_menu(void);
 #define RGB_SELECTED_BOX_OUTLINE_FADE1  RGB8(35, 37, 41)
 #define RGB_SELECTED_BOX_OUTLINE_FADE2  RGB8(25, 39, 61)
 
+// Name entry colors. The box tiles use color 1 for the body, 2 for the border
+// lines, 3 for the outline and text, and 0 only for the corner highlights.
+#define RGB_SAVE_NAVY             RGB8(20, 22, 44)
+#define RGB_SAVE_GOLD             RGB8(236, 212, 140)
+#define RGB_SAVE_ORANGE           RGB8(184, 120, 40)
+#define RGB_SAVE_BROWN            RGB8(64, 40, 16)
+#define RGB_SAVE_ERASE_RED        RGB8(150, 40, 40)
+#define RGB_SAVE_HINT             RGB8(150, 160, 190)
+
 #define RGB_GRAY_DARK             RGB8(80, 80, 80)
 #define RGB_GRAY_MID              RGB8(120, 120, 120)
 #define RGB_GRAY_LIGHT            RGB8(180, 180, 180)

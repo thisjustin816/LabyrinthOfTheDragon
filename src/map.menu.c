@@ -163,9 +163,8 @@ void update_map_menu_hp_sp(void) BANKED {
 static void update_map_menu_stats(void) {
   char buf[16];
 
-  // Name
-  sprintf(buf, player.name);
-  core.draw_text(VRAM_WINDOW_XY(NAME_X, NAME_Y), buf, 8);
+  // Name (drawn directly: a typed name may contain '%')
+  core.draw_text(VRAM_WINDOW_XY(NAME_X, NAME_Y), player.name, 8);
 
   // Class
   switch (player.player_class) {

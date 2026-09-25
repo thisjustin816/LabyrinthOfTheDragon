@@ -1,4 +1,7 @@
-#pragma bank 1
+// Bank 7, alongside main_menu.data.c. Bank 1 is nearly full, and this screen
+// reads its palette tables out of main_menu.data.c directly, so the code and
+// that data have to share a bank.
+#pragma bank 7
 
 #include <gb/gb.h>
 #include <gb/cgb.h>

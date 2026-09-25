@@ -8,6 +8,7 @@
 #include "core.h"
 #include "hero_select.h"
 #include "map.h"
+#include "name_entry.h"
 #include "sound.h"
 #include "stats.h"
 #include "test.h"
@@ -90,6 +91,9 @@ static inline void game_loop(void) {
     break;
   case GAME_STATE_CREDITS:
     update_credits();
+    break;
+  case GAME_STATE_NAME_ENTRY:
+    update_name_entry();
     break;
   }
 }

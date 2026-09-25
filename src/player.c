@@ -1370,23 +1370,33 @@ void set_player_level(uint8_t level) BANKED {
   full_heal_player();
 }
 
-void init_player(PlayerClass player_class) BANKED {
-  player.player_class = player_class;
-
-  switch (player.player_class) {
-  case CLASS_DRUID:
-    sprintf(player.name, "Lyra");
-    break;
+void default_hero_name(PlayerClass player_class, char *dst) BANKED {
+  const char *name;
+  switch (player_class) {
   case CLASS_FIGHTER:
-    sprintf(player.name, "Deneth");
+    name = "Deneth";
     break;
   case CLASS_MONK:
-    sprintf(player.name, "Ken");
+    name = "Ken";
     break;
   case CLASS_SORCERER:
-    sprintf(player.name, "Tyrion");
+    name = "Tyrion";
     break;
+  default:
+    name = "Lyra";
   }
+  uint8_t k = 0;
+  while (k < PLAYER_NAME_LEN && name[k]) {
+    dst[k] = name[k];
+    k++;
+  }
+  while (k < PLAYER_NAME_LEN)
+    dst[k++] = 0;
+}
+
+void init_player(PlayerClass player_class) BANKED {
+  player.player_class = player_class;
+  default_hero_name(player_class, player.name);
 
   player.has_torch = false;
   player.torch_gauge = 0;

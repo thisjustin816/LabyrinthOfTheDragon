@@ -16,6 +16,11 @@
 #define MAX_PLAYER_LEVEL 99
 
 /**
+ * Size of `Player::name`, and of every buffer a hero name is copied through.
+ */
+#define PLAYER_NAME_LEN 8
+
+/**
  * Level to set for new characters.
  */
 #define NEW_CHARACTER_LEVEL 5
@@ -109,7 +114,7 @@ typedef struct Player {
   /**
    * Player's name.
    */
-  char name[8];
+  char name[PLAYER_NAME_LEN];
   /**
    * The player's class.
    */
@@ -302,6 +307,14 @@ void set_player_level(uint8_t level) BANKED;
  * Initializes a new player with the given class.
  */
 void init_player(PlayerClass player_class) BANKED;
+
+/**
+ * Copies a class's default name into `dst`, which must hold PLAYER_NAME_LEN
+ * bytes; the name is NUL terminated and the rest of `dst` is zero filled. A
+ * copy rather than a pointer so callers in other banks never dereference this
+ * bank's ROM.
+ */
+void default_hero_name(PlayerClass player_class, char *dst) BANKED;
 
 /**
  * Adds the given experience points and performs a level up if applicable.
