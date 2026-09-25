@@ -332,6 +332,7 @@ inline void player_turn(void) {
   if (paralyzed) {
     sprintf(battle_pre_message, str_battle_player_paralyzed);
     SKIP_POST_MSG;
+    SFX_FAIL;
     return;
   }
 
@@ -345,12 +346,15 @@ inline void player_turn(void) {
         player.hp -= damage;
       sprintf(battle_pre_message, str_battle_player_confused_attack, damage);
       SKIP_POST_MSG;
+      SFX_MELEE;
+      player_was_hit = true;
       return;
     }
 
     if (d16() < 3) {
       sprintf(battle_pre_message, str_battle_player_confused_mumble);
       SKIP_POST_MSG;
+      SFX_FAIL;
       return;
     }
   }
@@ -358,6 +362,7 @@ inline void player_turn(void) {
   if (afraid) {
     sprintf(battle_pre_message, str_battle_player_scared);
     SKIP_POST_MSG;
+    SFX_FAIL;
     return;
   }
 
@@ -368,6 +373,7 @@ inline void player_turn(void) {
     else
       sprintf(battle_pre_message, str_battle_player_prone);
     SKIP_POST_MSG;
+    SFX_FAIL;
     return;
   }
 
@@ -428,6 +434,7 @@ inline void monster_turn(void) {
       sprintf(battle_pre_message, str_battle_monster_ice_slip,
         monster->name, monster->id);
       SKIP_POST_MSG;
+      SFX_FAIL;
       return;
     }
   }
@@ -444,6 +451,7 @@ inline void monster_turn(void) {
       monster->def = get_monster_def(level_offset(monster->level, -10), C_TIER);
     }
     SKIP_POST_MSG;
+    SFX_FAIL;
     return;
   }
 
@@ -460,6 +468,7 @@ inline void monster_turn(void) {
         sprintf(battle_pre_message, str_battle_monster_scared_frozen,
           monster->name, monster->id);
         SKIP_POST_MSG;
+        SFX_FAIL;
         return;
       }
       break;
@@ -468,6 +477,7 @@ inline void monster_turn(void) {
         sprintf(battle_pre_message, str_battle_monster_paralyzed,
           monster->name, monster->id);
         SKIP_POST_MSG;
+        SFX_FAIL;
         return;
       }
       break;
@@ -516,11 +526,13 @@ inline void monster_turn(void) {
             monster->name, monster->id);
         }
         SKIP_POST_MSG;
+        SFX_MELEE;
         return;
       } else {
         sprintf(battle_pre_message, str_battle_monster_confuse_stupor,
           monster->name, monster->id);
         SKIP_POST_MSG;
+        SFX_FAIL;
         return;
       }
       break;

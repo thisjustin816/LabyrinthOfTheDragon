@@ -86,6 +86,7 @@ static inline void use_remedy(void) {
   // flayer: Extract Brain off a confusion a remedy already cured).
   refresh_player_stats();
   sprintf(battle_pre_message, str_items_use_remedy);
+  SFX_HEAL;
   SKIP_POST_MSG;
 }
 

@@ -329,6 +329,7 @@ void druid_bark_skin(void) {
   SKIP_POST_MSG;
   apply_def_up(encounter.player_status_effects, B_TIER, 0);
   apply_special(SPECIAL_BARKSKIN);
+  SFX_MID_POWERUP;
 }
 
 void druid_lightning(void) {
@@ -467,6 +468,7 @@ void fighter_trip_attack(void) {
 
   target->trip_turns = turns;
   sprintf(battle_post_message, str_player_trip_attack_hit);
+  SFX_MELEE_ATTACK;
 }
 
 void fighter_menace(void) {
@@ -500,6 +502,8 @@ void fighter_menace(void) {
     sprintf(battle_post_message, str_player_hit_immune);
     skip_post_message = false;
     SFX_FAIL;
+  } else {
+    SFX_MAGIC;
   }
 }
 
@@ -507,6 +511,7 @@ void fighter_indomitable(void) {
   sprintf(battle_pre_message, str_player_indomitable);
   SKIP_POST_MSG;
   player.aspect_resist = 0xFF;
+  SFX_MID_POWERUP;
 }
 
 //------------------------------------------------------------------------------
@@ -612,6 +617,7 @@ void monk_still_mind(void) {
 
   sprintf(battle_pre_message, str_player_monk_still_mind);
   sprintf(battle_post_message, str_player_monk_still_mind_post);
+  SFX_MID_POWERUP;
 }
 
 void monk_flurry(void) {
@@ -747,6 +753,7 @@ void sorcerer_darkness(void) {
 void sorcerer_fireball(void) {
   sprintf(battle_pre_message, str_player_sorc_fireball);
   SKIP_POST_MSG;
+  SFX_MAGIC;
 
   Monster *monster = encounter.monsters;
   uint8_t mdef = monster->mdef;
@@ -779,6 +786,7 @@ void sorcerer_haste(void) {
 void sorcerer_sleetstorm(void) {
   sprintf(battle_pre_message, str_player_sorc_sleetstorm);
   SKIP_POST_MSG;
+  SFX_MAGIC;
   player.special_flags |= SPECIAL_SLEET_STORM;
 }
 
@@ -802,6 +810,7 @@ void sorcerer_disintegrate(void) {
     if (d8() < kill_chance) {
       sprintf(battle_post_message, str_player_sorc_disintegrate_kill);
       fell_monster(encounter.target);
+      SFX_SPECIAL_CRIT;
       return;
     }
   }
@@ -810,6 +819,7 @@ void sorcerer_disintegrate(void) {
   uint16_t base_dmg = get_player_damage(attack_level, S_TIER);
   base_dmg *= 2;
   damage_monster(base_dmg, DAMAGE_MAGICAL);
+  SFX_MAGIC;
 }
 
 void sorcerer_wild_magic(void) {

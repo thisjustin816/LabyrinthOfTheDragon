@@ -439,8 +439,6 @@ static void dragon_take_turn(Monster *monster) {
     sprintf(battle_post_message, str_monster2_dragon_hit_double, damage);
   else
     sprintf(battle_post_message, str_monster2_dragon_hit_single, damage);
-
-  SFX_MELEE;
 }
 
 void dragon_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
