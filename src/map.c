@@ -2760,6 +2760,10 @@ uint8_t map_floor_index(void) BANKED {
   return 0;
 }
 
+void set_active_floor_index(uint8_t index) BANKED {
+  set_active_floor((FloorBank *)floor_table[index < FLOOR_TABLE_LEN ? index : 0]);
+}
+
 void map_capture_state(SaveGame *s) BANKED {
   s->floor_index = map_floor_index();
   s->map_id = active_map->id;
@@ -2786,13 +2790,9 @@ void map_capture_state(SaveGame *s) BANKED {
  * Bank 2 half of `map_restore_state`.
  */
 static void restore_state(const SaveGame *s) {
-  uint8_t index = s->floor_index;
-  if (index >= FLOOR_TABLE_LEN)
-    index = 0;
-
   // Loads floor data and resets every object flag to its ROM default, then
   // runs the floor's `on_load`. The saved flags are applied over the top.
-  set_active_floor((FloorBank *)floor_table[index]);
+  set_active_floor_index(s->floor_index);
 
   uint8_t map_id = s->map_id;
   if (map_id >= MAX_MAPS)

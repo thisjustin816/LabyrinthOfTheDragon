@@ -14,4 +14,11 @@ void init_name_entry(void) BANKED;
  */
 void update_name_entry(void) BANKED;
 
+/**
+ * Gives the new hero what a first run carries onto the floor picked with
+ * SELECT on the name entry screen, and returns that floor's index, 0 for floor
+ * 1. Floor 1, the default, changes nothing.
+ */
+uint8_t ready_start_floor(void) BANKED;
+
 #endif

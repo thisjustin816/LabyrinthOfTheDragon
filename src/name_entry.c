@@ -6,7 +6,9 @@
 #include <stdint.h>
 
 #include "core.h"
+#include "encounter.h"
 #include "hero_select.h"
+#include "item.h"
 #include "main_menu.h"
 #include "name_entry.h"
 #include "player.h"
@@ -38,9 +40,17 @@
 // is the small block the pause menu uses as its AGL icon.
 #define EMPTY_CHAR 0x5F
 
+// A new game can start on a lower floor, to test it without playing the floors
+// before it. SELECT cycles this label, in the empty rows under the grid, from
+// START B2 to START B8 and back to blank for floor 1.
+#define START_ROW 15
+#define START_COL 6
+#define START_LEN 8
+
 // BG attributes: font tiles live in VRAM bank 1.
 #define ATTR_GRID 0x0F           // palette 7, as the art has it
 #define ATTR_GRID_SELECTED 0x0E  // palette 6
+#define ATTR_START 0x08          // palette 0, the hint color
 
 static const uint8_t grid_row_y[GRID_ROWS] = { 6, 7, 9, 10, 12 };
 // The last entry in the symbol row is the END cell, not a 13th symbol.
@@ -64,12 +74,42 @@ static const palette_color_t text_palettes[] = {
   RGB_SAVE_NAVY, RGB_SAVE_GOLD, RGB_SAVE_ORANGE, RGB_SAVE_BROWN,
 };
 
+/**
+ * What a new game started on a lower floor carries, from B2 on: about the level
+ * a full first run reaches that floor at, a magic key for each of the floor's
+ * key-locked chests, and every item a first run gathers on the floors before
+ * it without using any. Those floors hold more key-locked chests than they
+ * give keys, so a first run opens each floor's in order until its keys run
+ * out.
+ */
+typedef struct FloorStart {
+  uint8_t level;
+  uint8_t magic_keys;
+  uint8_t items[INVENTORY_LEN];
+} FloorStart;
+
+static const FloorStart floor_starts[] = {
+  // Level, keys, then the items in ItemId order: Potion, Ether, Remedy,
+  // ATK up, DEF up, Elixir, Regen, Haste.
+  { 14, 0, {  3, 1, 0, 0, 0, 0, 0, 0 } },  // B2
+  { 20, 2, {  6, 1, 1, 0, 0, 0, 0, 0 } },  // B3
+  { 30, 2, {  7, 2, 1, 0, 0, 0, 1, 0 } },  // B4
+  { 35, 3, {  8, 4, 1, 0, 0, 0, 2, 0 } },  // B5
+  { 45, 3, { 11, 7, 2, 0, 0, 1, 2, 0 } },  // B6
+  { 48, 0, { 15, 8, 2, 0, 0, 2, 5, 0 } },  // B7
+  { 52, 0, { 16, 8, 2, 1, 1, 5, 8, 2 } },  // B8
+};
+
+#define LAST_START_FLOOR (sizeof(floor_starts) / sizeof(floor_starts[0]) + 1)
+
 // PLAYER_NAME_LEN rather than NAME_MAX + 1: default_hero_name() fills the whole
 // player-name buffer, and only the first NAME_MAX characters are editable here.
 static char name[PLAYER_NAME_LEN];
 static uint8_t name_len;
 static uint8_t row;
 static uint8_t col;
+// The floor a new game starts on, from 1 to LAST_START_FLOOR.
+static uint8_t start_floor;
 
 /**
  * Redraws the name field: the typed characters, then underscores.
@@ -79,6 +119,18 @@ static void draw_field(void) {
   VBK_REG = VBK_TILES;
   for (uint8_t k = 0; k < NAME_MAX; k++, vram++)
     set_vram_byte(vram, (k < name_len ? name[k] : EMPTY_CHAR) + FONT_OFFSET);
+}
+
+/**
+ * Shows the floor a new game starts on, or blanks the label for floor 1.
+ */
+static void draw_start_floor(void) {
+  char label[] = "START B0";
+  if (start_floor > 1)
+    label[START_LEN - 1] = '0' + start_floor;
+  else
+    label[0] = 0;
+  core.draw_text(VRAM_BACKGROUND_XY(START_COL, START_ROW), label, START_LEN);
 }
 
 static void set_cell_attr(uint8_t r, uint8_t c, uint8_t attr) {
@@ -150,6 +202,10 @@ static void init_name_entry_impl(void) {
   core.draw_text(
     VRAM_BACKGROUND_XY(END_LABEL_COL, grid_row_y[SYMBOL_ROW]), END_LABEL, END_LABEL_LEN);
 
+  // The floor label's cells take the hint palette and start blank.
+  core.fill(VRAM_BACKGROUND_XY(START_COL, START_ROW), START_LEN, 1, FONT_SPACE, ATTR_START);
+  start_floor = 1;
+
   // Hero select's sprites are still positioned; hide them.
   for (uint8_t k = 0; k < 16; k++)
     move_sprite(k, 0, 0);
@@ -171,6 +227,13 @@ static void init_name_entry_impl(void) {
 static void update_name_entry_impl(void) {
   if (was_pressed(J_START)) {
     confirm_name();
+    return;
+  }
+
+  if (was_pressed(J_SELECT)) {
+    start_floor = start_floor == LAST_START_FLOOR ? 1 : start_floor + 1;
+    draw_start_floor();
+    play_sound(sfx_menu_move);
     return;
   }
 
@@ -227,4 +290,22 @@ void init_name_entry(void) BANKED {
 
 void update_name_entry(void) BANKED {
   update_name_entry_impl();
+}
+
+uint8_t ready_start_floor(void) BANKED {
+  if (start_floor < 2)
+    return 0;
+  const FloorStart *start = floor_starts + (start_floor - 2);
+  // Floors 2 to 6 each teach the next ability when their elite falls.
+  grant_ability(start_floor > 6 ? ABILITY_ALL
+    : (AbilityFlag)((1 << (start_floor - 1)) - 1));
+  set_player_level(start->level);
+  reset_player_stats();
+  player.has_torch = true;
+  // Floor 1 hands out the first key, so the key counter shows even at none.
+  player.got_magic_key = true;
+  player.magic_keys = start->magic_keys;
+  for (uint8_t k = 0; k < INVENTORY_LEN; k++)
+    add_items((ItemId)k, start->items[k]);
+  return start_floor - 1;
 }

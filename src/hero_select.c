@@ -204,8 +204,9 @@ void start_game(void) NONBANKED {
       player.name[k] = new_hero_name[k];
   }
   play_seconds = 0;
-  new_game_intro = true;
-  set_active_floor(&bank_floor1);
+  const uint8_t floor_index = ready_start_floor();
+  new_game_intro = floor_index == 0;
+  set_active_floor_index(floor_index);
 
   // Commit the new character to its slot straight away so the save select
   // screen shows the game even if the player never reaches a save point.

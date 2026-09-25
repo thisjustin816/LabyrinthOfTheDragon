@@ -1244,6 +1244,14 @@ inline void set_hero_position(int8_t x, int8_t y) {
 void set_active_floor(FloorBank *f) BANKED;
 
 /**
+ * Sets the active floor by its index in the floor table a save stores, the
+ * index `map_floor_index` returns: 0 for floor 1 through 7 for floor 8. An
+ * index past the table sets floor 1.
+ * @param index Floor table index.
+ */
+void set_active_floor_index(uint8_t index) BANKED;
+
+/**
  * Initialize the world map controller.
  */
 void init_world_map(void) NONBANKED;
