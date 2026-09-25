@@ -274,6 +274,7 @@ static bool elite_encounter(void) {
   Monster *monster = encounter.monsters;
   bugbear_generator(monster, 20, A_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(elite_victory);
   start_battle();
   return true;
@@ -290,6 +291,7 @@ static bool boss_encounter(void) {
   reset_encounter(MONSTER_LAYOUT_1);
   owlbear_generator(monster, 17, S_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(boss_victory);
   start_battle();
   return true;

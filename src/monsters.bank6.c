@@ -342,12 +342,16 @@ static void owlbear_take_turn(Monster *monster) {
     if (roll_attack_monster(monster->atk, player.def)) {
       uint16_t base_damage = get_monster_dmg(monster->level, tier);
       if (d8() < 2) {
-        // Toppled
-        monster->parameter--;
+        // Toppled, unless Evasion dodged the pounce outright: a zero from
+        // damage_player() is a dodge it has already announced, and like a
+        // miss, a dodged pounce knocks nobody down and keeps its charge.
         uint16_t dmg = damage_player(base_damage, DAMAGE_PHYSICAL);
-        player.trip_turns = 1;
-        sprintf(battle_post_message, str_monster_owlbear_pounce_topple, dmg);
-        SFX_SPECIAL_CRIT;
+        if (dmg > 0) {
+          monster->parameter--;
+          player.trip_turns = 1;
+          sprintf(battle_post_message, str_monster_owlbear_pounce_topple, dmg);
+          UNLESS_CRITICAL(SFX_SPECIAL_CRIT);
+        }
       } else {
         damage_player(base_damage, DAMAGE_PHYSICAL);
       }
@@ -515,14 +519,21 @@ static void displacer_beast_take_turn(Monster *monster) {
   uint16_t base_damage = get_monster_dmg(
     level_offset(monster->level, -10), tier);
 
+  // A zero is a blow the monk's Evasion dodged: damage_player() has already
+  // said "But you evade!" and played the evade sound, and writing the hit line
+  // over it would read "They hit twice for 0 damage!".
   if (hit1 && hit2) {
     const uint16_t result = damage_player(2 * base_damage, DAMAGE_DARK);
-    sprintf(battle_post_message, str_monster_displacer_beast_2hit, result);
-    SFX_SPECIAL_CRIT;
+    if (result > 0) {
+      sprintf(battle_post_message, str_monster_displacer_beast_2hit, result);
+      UNLESS_CRITICAL(SFX_SPECIAL_CRIT);
+    }
   } else if (hit1 || hit2) {
     const uint16_t result = damage_player(base_damage, DAMAGE_DARK);
-    sprintf(battle_post_message, str_monster_displacer_beast_1hit, result);
-    SFX_MELEE;
+    if (result > 0) {
+      sprintf(battle_post_message, str_monster_displacer_beast_1hit, result);
+      UNLESS_CRITICAL(SFX_MELEE);
+    }
   } else {
     sprintf(battle_post_message, str_monster_displacer_beast_miss);
     SFX_MISS;
@@ -573,7 +584,11 @@ static void will_o_wisp_take_turn(Monster *monster) {
       if (damage + monster->target_hp > monster->max_hp)
         heal = monster->max_hp - monster->target_hp;
       monster->target_hp += heal;
-      sprintf(battle_post_message, str_monster_will_o_wisp_siphon_hit, damage);
+      // Zero is an evaded hit, which damage_player() has already announced.
+      if (damage > 0) {
+        sprintf(
+          battle_post_message, str_monster_will_o_wisp_siphon_hit, damage);
+      }
     } else {
       sprintf(battle_post_message, str_monster_miss);
       SFX_FAIL;
@@ -605,7 +620,12 @@ static void will_o_wisp_take_turn(Monster *monster) {
   // Normal attack
   sprintf(battle_pre_message, str_monster_will_o_wisp_lightning, monster->id);
   if (roll_attack_monster(monster->matk, player.mdef)) {
-    damage_player(base_damage, DAMAGE_AIR);
+    uint16_t damage = damage_player(base_damage, DAMAGE_AIR);
+    // Flavor over the generic hit line, the way the other themed attacks do.
+    // A zero means the hit was evaded; leave that message, and its sound, be.
+    if (damage > 0) {
+      sprintf(battle_post_message, str_monster_will_o_wisp_hit, damage);
+    }
   } else {
     sprintf(battle_post_message, str_monster_miss);
     SFX_MISS;
@@ -656,14 +676,19 @@ static void deathknight_take_turn(Monster *monster) {
       str_monster_deathknight_hellfire, monster->id);
 
     base_damage = get_monster_dmg(orb_level, tier);
+    // Zero is an evaded hit, which damage_player() has already announced.
     if (roll_attack_monster(monster->matk, player.mdef)) {
       uint16_t damage = damage_player(base_damage, DAMAGE_FIRE);
-      sprintf(battle_post_message,
-        str_monster_deathknight_hellfire_hit, damage);
+      if (damage > 0) {
+        sprintf(battle_post_message,
+          str_monster_deathknight_hellfire_hit, damage);
+      }
     } else {
       uint16_t damage = damage_player(base_damage / 2, DAMAGE_FIRE);
-      sprintf(battle_post_message,
-        str_monster_deathknight_hellfire_miss, damage);
+      if (damage > 0) {
+        sprintf(battle_post_message,
+          str_monster_deathknight_hellfire_miss, damage);
+      }
     }
     return;
   }
@@ -676,13 +701,19 @@ static void deathknight_take_turn(Monster *monster) {
 
   base_damage = get_monster_dmg(longsword_level, tier);
 
+  // Zero is an evaded hit, which damage_player() has already announced.
   if (hit1 && hit2) {
     base_damage *= 2;
     uint16_t damage = damage_player(base_damage, DAMAGE_PHYSICAL);
-    sprintf(battle_post_message, str_monster_deathknight_hit2, damage);
+    if (damage > 0) {
+      sprintf(battle_post_message, str_monster_deathknight_hit2, damage);
+      UNLESS_CRITICAL(SFX_SPECIAL_CRIT);
+    }
   } else if (hit1 || hit2) {
     uint16_t damage = damage_player(base_damage, DAMAGE_PHYSICAL);
-    sprintf(battle_post_message, str_monster_deathknight_hit1, damage);
+    if (damage > 0) {
+      sprintf(battle_post_message, str_monster_deathknight_hit1, damage);
+    }
   } else {
     sprintf(battle_post_message, str_monster_miss);
     SFX_MISS;

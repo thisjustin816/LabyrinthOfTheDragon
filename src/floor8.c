@@ -123,6 +123,7 @@ static void mini_boss_encounter(MiniBoss b) {
   }
 
   monster->id = 'A';
+  monster->can_flee = false;
 
   current_mini_boss = b;
   set_on_victory(on_mini_boss_victory);

@@ -47,6 +47,15 @@ bool player_died = false;
 static Timer cursor_timer;
 
 /**
+ * The directions held since before the current menu opened. A hold like that
+ * was meant for something else, such as walking into the fight or moving the
+ * last menu's cursor, so it does not move this menu's cursor until it is
+ * released and pressed again. Each direction clears on its own release, so a
+ * thumb rolling onto a new direction moves the cursor as a fresh hold does.
+ */
+static uint8_t dpad_held_over = 0;
+
+/**
  * Handles D-Pad input for battle menus. Allows the player to hold a direction
  * and have the cursor continue to move until they let go.
  * @param button Button to check.
@@ -56,6 +65,8 @@ inline bool on_dpad(uint8_t button) {
     init_timer(cursor_timer, 20);
     return true;
   } else if (is_down(button)) {
+    if (dpad_held_over & button)
+      return false;
     if (!update_timer(cursor_timer))
       return false;
     init_timer(cursor_timer, 9);
@@ -110,6 +121,7 @@ static Monster *get_monster_at_cursor(void) {
  */
 static void confirm_fight(void) {
   play_sound(sfx_menu_move);
+  battle_menu.last_target = battle_menu.screen_cursor;
   set_player_fight(get_monster_at_cursor());
   battle_state = BATTLE_ROLL_INITIATIVE;
 }
@@ -120,9 +132,10 @@ static void confirm_fight(void) {
  */
 static void confirm_ability(const Ability *ability) {
   play_sound(sfx_menu_move);
-  if (ability->target_type == TARGET_SINGLE)
+  if (ability->target_type == TARGET_SINGLE) {
+    battle_menu.last_target = battle_menu.screen_cursor;
     set_player_ability(ability, get_monster_at_cursor());
-  else
+  } else
     set_player_ability(ability, NULL);
   battle_state = BATTLE_ROLL_INITIATIVE;
 }
@@ -696,17 +709,6 @@ static void render_item_text(void) {
 }
 
 /**
- * Re-renders the item at the current submenu cursor. Primarily used to redraw
- * item quantities when they are used.
- */
-static void update_item_text_at_cursor(void) {
-  const char *format = " %s        x%2u";
-  const uint8_t cursor = battle_menu.cursor;
-  Item *item = inventory + battle_menu.item_at[cursor];
-  sprintf(battle_menu.item_text[cursor], format, item->name, item->quantity);
-}
-
-/**
  * Points the open submenu at `entries` lines and moves the scroll ceiling with
  * it. Does not touch the cursor or the current scroll position.
  */
@@ -714,27 +716,6 @@ static void set_submenu_entries(uint8_t entries) {
   battle_menu.entries = entries;
   battle_menu.max_scroll =
     entries <= SUBMENU_ROWS ? 0 : entries - SUBMENU_ROWS;
-}
-
-/**
- * Removes the text for the item at the cursor if the last one was used.
- */
-static void remove_item_text_at_cursor(void) {
-  const uint8_t cursor = battle_menu.cursor;
-  const uint8_t entries = battle_menu.inventory_entries - 1;
-
-  for (uint8_t c = 0; c < 18; c++)
-    battle_menu.item_text[cursor][c] = ' ';
-  battle_menu.item_text[cursor][18] = 0;
-  battle_menu.item_at[cursor] = ITEM_INVALID;
-
-  for (uint8_t k = cursor; k < entries; k++) {
-    battle_menu.item_at[k] = battle_menu.item_at[k + 1];
-    for (uint8_t c = 0; c < 19; c++)
-      battle_menu.item_text[k][c] = battle_menu.item_text[k + 1][c];
-  }
-
-  battle_menu.inventory_entries = entries;
 }
 
 /**
@@ -951,6 +932,7 @@ static void submenu_cursor_down(void) {
 static void open_battle_menu(BattleMenuType m) {
   uint8_t prev_menu = battle_menu.active_menu;
   battle_menu.active_menu = m;
+  dpad_held_over = is_down(J_DPAD);
   switch (m) {
   case BATTLE_MENU_MAIN:
     switch (prev_menu) {
@@ -966,6 +948,12 @@ static void open_battle_menu(BattleMenuType m) {
     break;
   case BATTLE_ABILITY_MONSTER_SELECT:
   case BATTLE_MENU_FIGHT:
+    // Aim at the last target again while it stands, or else the first
+    // monster that does.
+    if (get_monster(battle_menu.last_target - BATTLE_CURSOR_MONSTER_1)->active) {
+      move_screen_cursor(battle_menu.last_target);
+      return;
+    }
     Monster *monster = encounter.monsters;
     for (uint8_t pos = 0; pos < 3; pos++, monster++) {
       if (monster->active) {
@@ -1031,6 +1019,8 @@ static void main_menu_cursor_commit(void) {
  * @see `update_battle`
  */
 static inline void update_battle_menu(void) {
+  dpad_held_over &= joypad_down;
+
   switch (battle_menu.active_menu) {
   case BATTLE_MENU_MAIN:
     if (was_pressed(J_A))
@@ -1053,6 +1043,7 @@ static inline void update_battle_menu(void) {
   case BATTLE_ABILITY_MONSTER_SELECT:
     if (was_pressed(J_B)) {
       battle_menu.active_menu = BATTLE_MENU_ABILITY;
+      dpad_held_over = is_down(J_DPAD);
       move_screen_cursor(battle_menu.last_ability_cursor);
     } else if (was_pressed(J_A))
       confirm_ability(battle_menu.active_ability);
@@ -1092,18 +1083,16 @@ static inline void update_battle_menu(void) {
     else if (was_pressed(J_A)) {
       ItemId item_id = battle_menu.item_at[battle_menu.cursor];
 
-      // An empty submenu has no item under the cursor; don't index the
-      // inventory with ITEM_INVALID.
-      if (battle_menu.entries == 0 || item_id == ITEM_INVALID ||
-          !can_use_item(item_id)) {
+      // An empty submenu has no item under the cursor, so those checks come
+      // first: can_use_item() would index the inventory with ITEM_INVALID.
+      if (
+        battle_menu.entries == 0 ||
+        item_id == ITEM_INVALID ||
+        !can_use_item(item_id)
+      ) {
         play_sound(sfx_error);
         break;
       }
-
-      if (!remove_item(item_id))
-        remove_item_text_at_cursor();
-      else
-        update_item_text_at_cursor();
 
       confirm_item(item_id);
     }
@@ -1365,6 +1354,8 @@ void initialize_battle(void) {
   }
   move_screen_cursor_no_sound(BATTLE_CURSOR_MAIN_FIGHT);
   battle_menu.active_menu = BATTLE_MENU_MAIN;
+  battle_menu.last_target = BATTLE_CURSOR_MONSTER_1;
+  dpad_held_over = is_down(J_DPAD);
 
   // Initialize the encounter and player graphics
   battle_init_encounter();
@@ -1477,6 +1468,13 @@ void update_battle(void) NONBANKED {
     break;
   case BATTLE_TAKE_ACTION:
     take_action();
+    // An item leaves the inventory on the player's own turn (use_item()), so
+    // the prerendered item rows are rebuilt once that turn has run.
+    if (
+      encounter.turn == TURN_PLAYER &&
+      encounter.player_action == PLAYER_ACTION_ITEM
+    )
+      render_item_text();
     text_writer.print(battle_pre_message);
     animation_state = ANIMATION_PREAMBLE;
     if (skip_post_message)
@@ -1510,6 +1508,7 @@ void update_battle(void) NONBANKED {
   case BATTLE_END_ROUND:
     battle_state = BATTLE_STATE_MENU;
     battle_menu.active_menu = BATTLE_MENU_MAIN;
+    dpad_held_over = is_down(J_DPAD);
     update_player_mp();
     hide_battle_text();
     play_sound(sfx_next_round);

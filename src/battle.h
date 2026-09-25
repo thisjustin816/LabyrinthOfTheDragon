@@ -341,6 +341,8 @@ typedef struct BattleMenu {
   char item_text[INVENTORY_LEN][19];
   ItemId item_at[INVENTORY_LEN];
   uint8_t inventory_entries;
+  // The monster the last single-target command was aimed at.
+  BattleScreenCursor last_target;
 } BattleMenu;
 
 typedef enum AnimationState {

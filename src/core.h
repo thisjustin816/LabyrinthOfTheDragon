@@ -360,6 +360,11 @@ extern uint8_t joypad_pressed;
 extern uint8_t joypad_released;
 
 /**
+ * Bitmask of the four D-pad directions.
+ */
+#define J_DPAD (J_UP | J_DOWN | J_LEFT | J_RIGHT)
+
+/**
  * @param b Button bitmask.
  * @return `true` If the button is down.
  */

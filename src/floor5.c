@@ -296,6 +296,7 @@ static bool on_boss_encounter(void) {
   reset_encounter(MONSTER_LAYOUT_1);
   deathknight_generator(monster, 39, B_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_boss_victory);
   start_battle();
   return true;
@@ -306,6 +307,7 @@ static bool on_elite_encounter(void) {
   reset_encounter(MONSTER_LAYOUT_1);
   gelatinous_cube_generator(monster, 37, B_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_elite_victory);
   start_battle();
   return true;

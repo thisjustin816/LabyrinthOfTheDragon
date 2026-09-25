@@ -222,6 +222,7 @@ static bool boss_encounter(void) {
   reset_encounter(MONSTER_LAYOUT_1);
   goblin_generator(monster, 10, S_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(boss_victory);
   start_battle();
   return true;

@@ -90,9 +90,10 @@ inline void clear_inventory(void) {
 bool can_use_item(ItemId id);
 
 /**
- * Uses an item. Only performs the action for the item, inventory quantity
- * state must be managed with `remove_item`.
- * @param item Item to use.
+ * Uses a queued battle item on the player's turn: takes one from the inventory
+ * and applies it. If the item would no longer help, it stays in the inventory
+ * and the battle text says so.
+ * @param id Item to use.
  */
 void use_item(ItemId id);
 

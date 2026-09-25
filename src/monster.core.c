@@ -143,7 +143,7 @@ void monster_flee(Monster *monster) BANKED {
     monster->id
   );
 
-  if (roll_flee(monster->agl, player.agl))
+  if (monster->can_flee && roll_flee(monster->agl, player.agl))
     MONSTER_FLEE(monster);
   else
     MONSTER_FLEE_FAIL(monster);

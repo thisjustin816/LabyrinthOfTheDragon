@@ -275,6 +275,13 @@ inline void player_turn(void) {
   bool confused = false;
   PowerTier confused_tier = C_TIER;
 
+  // Still Mind cures the debuffs that would stop it, so a queued one goes
+  // through fear, paralysis, and confusion.
+  const bool still_mind =
+    player.player_class == CLASS_MONK &&
+    encounter.player_action == PLAYER_ACTION_ABILITY &&
+    encounter.player_ability == &monk2;
+
   StatusEffectInstance *effect = encounter.player_status_effects;
 
   for (uint8_t k = 0; k < MAX_ACTIVE_EFFECTS; k++, effect++) {
@@ -283,6 +290,8 @@ inline void player_turn(void) {
 
     switch (effect->effect) {
     case DEBUFF_SCARED:
+      if (still_mind)
+        break;
       if (fear_flee_roll(effect->tier))
         fleeing = true;
       else if (fear_shiver_roll(effect->tier))
@@ -300,23 +309,17 @@ inline void player_turn(void) {
         player.hp -= poison;
       break;
     case DEBUFF_PARALYZED:
-      if (
-        player.player_class != CLASS_MONK ||
-        encounter.player_action != PLAYER_ACTION_ABILITY ||
-        encounter.player_ability != &monk2
-      ) {
-        paralyzed = true;
-      }
+      if (still_mind)
+        break;
+      // Same roll the monster path gets: paralysis usually costs the turn,
+      // but it is not a guaranteed lock.
+      paralyzed = paralyzed_roll(effect->tier);
       break;
     case DEBUFF_CONFUSED:
-      if (
-        player.player_class != CLASS_MONK ||
-        encounter.player_action != PLAYER_ACTION_ABILITY ||
-        encounter.player_ability != &monk2
-      ) {
-        confused = true;
-        confused_tier = effect->tier;
-      }
+      if (still_mind)
+        break;
+      confused = true;
+      confused_tier = effect->tier;
       break;
     case BUFF_REGEN:
       uint16_t regen = regen_hp(effect->tier, player.max_hp);

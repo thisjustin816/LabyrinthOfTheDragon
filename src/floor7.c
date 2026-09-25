@@ -316,6 +316,7 @@ static bool on_boss_encounter(void) {
   reset_encounter(MONSTER_LAYOUT_1);
   beholder_generator(monster, 54, A_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_boss_victory);
   start_battle();
   return true;
@@ -326,6 +327,7 @@ static bool on_elite_encounter(void) {
   reset_encounter(MONSTER_LAYOUT_1);
   displacer_beast_generator(monster, 50, B_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_elite_victory);
   start_battle();
   return true;

@@ -342,7 +342,7 @@ addNamespace('items', 3, {
   'use_elixir': 'You fully heal!',
   'use_regen': 'You begin regenerating!',
   'use_haste': 'The world slows down!',
-  'use_failed': "The item didn't work!",
+  'use_failed': "You don't need it, so you keep it.",
 })
 
 addNamespace('monster', 6, {
