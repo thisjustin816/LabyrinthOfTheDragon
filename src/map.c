@@ -1748,6 +1748,22 @@ static void load_exit(void) {
 }
 
 /**
+ * Plays the sound for leaving through an exit of the given type.
+ */
+static void play_exit_sound(ExitType type) {
+  switch (type) {
+  case EXIT_HOLE:
+    play_sound(sfx_falling);
+    break;
+  case EXIT_PORTAL:
+    play_sound(sfx_no_no_square);
+    break;
+  default:
+    play_sound(sfx_stairs);
+  }
+}
+
+/**
  * Handles state updates when the player moves into an exit tile.
  * @return `true` if default move behavior should be prevented.
  */
@@ -1764,16 +1780,7 @@ static bool handle_exit(void) {
     if (exit->col != x || exit->row != y)
       continue;
 
-    switch (exit->exit_type) {
-    case EXIT_HOLE:
-      play_sound(sfx_falling);
-      break;
-    case EXIT_PORTAL:
-      play_sound(sfx_no_no_square);
-      break;
-    default:
-      play_sound(sfx_stairs);
-    }
+    play_exit_sound(exit->exit_type);
 
     active_exit.to_map = exit->to_map;
     active_exit.to_col = exit->to_col;
@@ -2598,7 +2605,7 @@ void update_map(void) {
     return;
   case MAP_STATE_TELEPORT:
     map_fade_out(MAP_STATE_LOAD_EXIT);
-    play_sound(sfx_no_no_square);
+    play_exit_sound(active_exit.exit_type);
     return;
   }
 

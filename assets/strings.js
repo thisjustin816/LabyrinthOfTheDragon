@@ -239,6 +239,7 @@ addNamespace('floor3', 2, {
 });
 
 addNamespace('floor4', 2, {
+  'sign_flames': 'Where a sconce is missing, take its color...',
   'elite_attack': 'KWAAAAAAHHH!',
   'boss': 'NyaAAAHHHH!',
   'boss_not_yet': 'Nya?',
@@ -273,6 +274,7 @@ addNamespace('floor8', 2, {
 });
 
 addNamespace('floor_common', 2, {
+  'another_lever': "Another lever still holds this door!",
   'growl': "GROWL!",
   'light_fires': "Light these fires to open this door!",
   'missing': "Something used to have been here...",

@@ -140,9 +140,14 @@ static const Sign signs[] = {
 
 #define START_STUCK true
 
+// The state names the shut eyes, as on_pulled() draws them: 0 none,
+// 1 left, 2 middle, 3 right, 4 left and middle, 5 left and right, 6 middle
+// and right, 7 all three. The left lever opens or shuts the left eye; the
+// right lever moves every eye one place right, the rightmost coming around
+// to the left. Left, right, left, right, left shuts all three.
 uint8_t puzzle_state = 0;
-const uint8_t a_lookup[8] = { 1, 4, 1, 1, 3, 6, 7, 7 };
-const uint8_t b_lookup[8] = { 2, 0, 3, 5, 2, 4, 0, 7 };
+const uint8_t a_lookup[8] = { 1, 0, 4, 5, 2, 3, 7, 7 };
+const uint8_t b_lookup[8] = { 0, 2, 3, 1, 6, 4, 5, 7 };
 
 static void set_eyes(uint8_t a, uint8_t b, uint8_t c) {
   set_tile_at(MAP_A, 7, 25, a ? 0x35 : 0x36);
@@ -186,7 +191,7 @@ static void on_pulled(const Lever *lever) {
     play_sound(sfx_big_door_open);
     stick_lever(LEVER_1);
     stick_lever(LEVER_2);
-    set_palette_at(MAP_A, 8, 26, 4);
+    set_palette_at(MAP_A, 8, 25, 4);
   } else {
     play_sound(sfx_door_unlock);
   }
@@ -461,6 +466,7 @@ static const EncounterTable encounters_high[] = {
 };
 
 static bool on_init(void) {
+  puzzle_state = 0;
   switch_lever_1 = false;
   switch_lever_2 = false;
   switch_door_6 = false;
@@ -481,6 +487,15 @@ static bool on_special(void) {
   if (player_at(18, 6)) {
     set_tile_at(MAP_A, 18, 6, 0xEC);
     teleport(MAP_A, 14, 28, HERE, EXIT_HOLE);
+    return true;
+  }
+
+  // The sconce pocket's way out. The pocket lies under the item room, with
+  // this crack below the room's doorway, so it drops you in the lever hall
+  // in front of the item room's door.
+  if (player_at(21, 30)) {
+    set_tile_at(MAP_A, 21, 30, 0xEC);
+    teleport(MAP_A, 9, 27, HERE, EXIT_HOLE);
     return true;
   }
 
@@ -536,6 +551,19 @@ static bool on_special(void) {
 }
 
 static bool on_move(void) {
+  // Sconce pocket hole. Not in on_special() with the cracked-floor holes
+  // above because (11,18) is ordinary GROUND and on_special() only ever
+  // runs on MAP_SPECIAL tiles; returning true here skips the encounter roll
+  // below the same way a true on_special() would. Gated on CHEST_5 so it
+  // stays inert until the chest is claimed -- the Item Room is five tiles
+  // total, and an always-live hole here swallows the player on their first
+  // step toward the chest instead of rewarding them for reaching it.
+  if (player_at(11, 18) && is_chest_open(CHEST_5)) {
+    set_tile_at(MAP_A, 11, 18, 0xEC);
+    teleport(MAP_A, 22, 28, HERE, EXIT_HOLE);
+    return true;
+  }
+
   if (check_random_encounter()) {
     if (player.level < 50)
       generate_encounter(encounters_low);

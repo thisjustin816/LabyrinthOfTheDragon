@@ -358,6 +358,9 @@ static bool on_init(void) {
   return false;
 }
 
+// Palette 5 below: the bones on a goblin guard's tile once it has fought.
+#define DIM_BONES_PALETTE 4
+
 static void goblin_defender_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
@@ -366,32 +369,28 @@ static void goblin_defender_encounter(void) {
   start_battle();
 }
 
+/**
+ * Starts the goblin guard's fight at (x, y) if the hero stands there and that
+ * guard hasn't fought since the floor loaded. The map draws bones on each
+ * guard's tile in the bright bone palette, and the fight repaints them in the
+ * dim one as it sets `fought`, so the two always agree.
+ * @param fought The guard's special_enc flag.
+ * @return Whether the fight started.
+ */
+static bool goblin_guard(uint8_t x, uint8_t y, bool *fought) {
+  if (!player_at(x, y) || *fought)
+    return false;
+  *fought = true;
+  set_palette_at(MAP_A, x, y, DIM_BONES_PALETTE);
+  goblin_defender_encounter();
+  return true;
+}
+
 static bool on_special(void) {
-  if (player_at(3, 26) && !special_enc_1) {
-    goblin_defender_encounter();
-    special_enc_1 = true;
-    return true;
-  }
-
-  if (player_at(9, 26) && !special_enc_2) {
-    goblin_defender_encounter();
-    special_enc_2 = true;
-    return true;
-  }
-
-  if (player_at(22, 3) && !special_enc_3) {
-    goblin_defender_encounter();
-    special_enc_3 = true;
-    return true;
-  }
-
-  if (player_at(28, 3) && !special_enc_4) {
-    goblin_defender_encounter();
-    special_enc_4 = true;
-    return true;
-  }
-
-  return false;
+  return goblin_guard(3, 26, &special_enc_1) ||
+    goblin_guard(9, 26, &special_enc_2) ||
+    goblin_guard(22, 3, &special_enc_3) ||
+    goblin_guard(28, 3, &special_enc_4);
 }
 
 static bool on_move(void) {
@@ -473,16 +472,17 @@ static const palette_color_t palettes[] = {
   RGB8(85, 166, 57),
   RGB8(74, 45, 100),
   RGB8(37, 20, 0),
-  // Palette 4
-  RGB_WHITE,
-  RGB8(120, 120, 120),
-  RGB8(60, 60, 60),
-  RGB_BLACK,
-  // Palette 5
-  RGB_WHITE,
-  RGB8(120, 120, 120),
-  RGB8(60, 60, 60),
-  RGB_BLACK,
+  // Palette 4 - Bones on a goblin guard's waiting tile: the core colors, with
+  // bone white in the slot the floor uses for highlights
+  RGB8(200, 190, 150),
+  RGB8(85, 166, 57),
+  RGB8(74, 45, 100),
+  RGB8(37, 20, 0),
+  // Palette 5 - Bones once the guard has fought
+  RGB8(110, 140, 80),
+  RGB8(85, 166, 57),
+  RGB8(74, 45, 100),
+  RGB8(37, 20, 0),
   // Palette 6
   RGB_WHITE,
   RGB8(120, 120, 120),

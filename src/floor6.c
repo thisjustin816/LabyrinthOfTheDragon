@@ -176,11 +176,15 @@ static void on_pulled(const Lever *lever) {
     return;
   }
 
-  if (lever->id == LEVER_3 || lever->id == LEVER_4) {
-    if (is_door_open(DOOR_3) && is_door_open(DOOR_4)) {
-      open_door(DOOR_1);
-      map_textbox(str_floor2_door_opens);
-    }
+  // Both wings' levers have to be thrown before the boss door opens, and only
+  // one wing holds anything else worth the detour. A player who skips the
+  // other wing has made a reasonable call, and without this the lever they did
+  // pull says nothing and the boss door stays shut with no hint why.
+  if (is_door_open(DOOR_3) && is_door_open(DOOR_4)) {
+    open_door(DOOR_1);
+    map_textbox(str_floor2_door_opens);
+  } else {
+    map_textbox(str_floor_common_another_lever);
   }
 }
 

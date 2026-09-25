@@ -13,6 +13,12 @@
 
 bool special_encounter = true;
 
+// The stairs to floor 2 are one-way (there's no route back down once the
+// player takes them); warn before that first step onto them, the way the
+// unused sign in floor 2's original layout tried to. Reset on_load so a
+// death-and-replay warns again.
+bool warned_no_return = false;
+
 //------------------------------------------------------------------------------
 // Maps
 //------------------------------------------------------------------------------
@@ -334,6 +340,16 @@ static bool on_special(void) {
 }
 
 static bool on_move(void) {
+  if (
+    player_at(12, 4) &&
+    is_door_open(DOOR_3) &&
+    !warned_no_return
+  ) {
+    warned_no_return = true;
+    map_textbox(str_floor_common_no_return);
+    return true;
+  }
+
   if (!check_random_encounter())
     return false;
 
@@ -352,6 +368,7 @@ static bool on_action(void) {
 
 static void on_load(void) {
   special_encounter = true;
+  warned_no_return = false;
 }
 
 //------------------------------------------------------------------------------

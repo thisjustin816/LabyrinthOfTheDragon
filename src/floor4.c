@@ -145,6 +145,18 @@ static const Sign signs[] = {
     "Hi there!" // The message to display
   }
   */
+
+  // Sits between the three colored sconces and DOOR_1, so it is read at the
+  // moment the question comes up: the player tries the door, finds it shut,
+  // and turns one tile to the hint. Each puzzle room shows three icons in the
+  // row above, but only two sconces beneath them: the third sits over an empty
+  // alcove. That icon is the only one drawn in color, and its color is what
+  // both sconces in the room must burn -- green in the west room, red in the
+  // central, blue in the east. The sign only sends the player to look there,
+  // since the floor answers itself once they know where to look. Keep it to
+  // one textbox: a hint that runs to a second box is a hint people skip.
+  { MAP_A, 27, 27, UP, str_floor4_sign_flames },
+
   { END },
 };
 
