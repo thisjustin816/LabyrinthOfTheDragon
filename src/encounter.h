@@ -335,8 +335,7 @@ StatusEffectResult apply_status_effect(
 ) BANKED;
 
 /**
- * Handles the player "flee" action.
- * @return Whether or not the player could flee.
+ * Handles the player "flee" action and sets `encounter.player_fled`.
  */
 void player_flee(void);
 

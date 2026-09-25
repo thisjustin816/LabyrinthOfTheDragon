@@ -342,9 +342,9 @@ void dragon_generator(
   Monster *m, uint8_t level, PowerTier tier) BANKED;
 
 /**
- * Handle the "flee" action for a monster.
+ * Handles the "flee" action for a monster and marks it fled if it gets away. A
+ * monster that can't flee always fails.
  * @param monster Monster who is trying to flee.
- * @return Whether or not the monster could flee.
  */
 void monster_flee(Monster *monster) BANKED;
 

@@ -383,9 +383,12 @@ uint16_t calc_damage(uint8_t d16_roll, uint16_t base_dmg) BANKED;
 uint16_t calc_monster_exp(uint8_t level, PowerTier tier) BANKED;
 
 /**
- * Rolls to see if a flee attempt is successful, given opposing agilities.
+ * Rolls to see if a flee attempt is successful, given opposing agilities: half
+ * the time, plus 1 in 16 for each point of AGL the one fleeing has over the
+ * blocker, and never below 1 in 8 or above 7 in 8. AGL runs from 0 to about 20
+ * over the whole game, so a gap of a few points already counts for a lot.
  * @param agl Agility of the entity attempting to flee.
- * @param block_agility Agility of the blocker, attempting to stop the flee.
+ * @param block_agl Agility of the blocker, attempting to stop the flee.
  */
 bool roll_flee(uint8_t agl, uint8_t block_agl) BANKED;
 

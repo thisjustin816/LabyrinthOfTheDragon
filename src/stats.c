@@ -134,11 +134,12 @@ const uint8_t agl_mod[4] = { 2, 4, 8, 12 };
 const uint16_t atk_def_mod[4] = { 1, 2, 4, 6 };
 
 bool roll_flee(uint8_t agl, uint8_t block_agl) BANKED {
-  if (block_agl > agl + 10)
-    return false;
-  if (agl > block_agl + 10)
-    return true;
-  return rand() < 128;
+  int16_t chance = 128 + 16 * ((int16_t)agl - (int16_t)block_agl);
+  if (chance < 32)
+    chance = 32;
+  else if (chance > 224)
+    chance = 224;
+  return d256() < chance;
 }
 
 uint8_t agl_down(uint8_t base_agl, PowerTier tier) BANKED {

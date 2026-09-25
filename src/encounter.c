@@ -801,20 +801,48 @@ StatusEffectResult apply_status_effect(
 void player_flee(void) {
   sprintf(battle_pre_message, str_battle_player_flee_attempt);
 
+  // A monster that cannot see you, or is too frightened to give chase, does
+  // not get to block your escape. Only the ones still paying attention count
+  // toward the agility you have to beat, and with none left you always get
+  // away.
+  //
+  // This reads the effect slots rather than monster->debuffs: that cache is
+  // rebuilt only on the monster's own turn, so a monster blinded since its
+  // last turn would still read as alert here. AGL changes still count from
+  // the monster's next turn, as they do for initiative.
+  bool chased = false;
   uint8_t max_def_agl = 0;
   Monster *monster = encounter.monsters;
   for (uint8_t k = 0; k < 3; k++, monster++) {
     if (!monster->active)
       continue;
+
+    bool cannot_give_chase = false;
+    StatusEffectInstance *effect = monster->status_effects;
+    for (uint8_t e = 0; e < MAX_ACTIVE_EFFECTS; e++, effect++) {
+      if (!effect->active)
+        continue;
+      // The effect, not its flag: buffs reuse the flag bits of these debuffs.
+      if (effect->effect == DEBUFF_BLIND || effect->effect == DEBUFF_SCARED) {
+        cannot_give_chase = true;
+        break;
+      }
+    }
+    if (cannot_give_chase)
+      continue;
+
+    chased = true;
     if (max_def_agl < monster->agl)
       max_def_agl = monster->agl;
   }
 
-  encounter.player_fled = roll_flee(player.agl, max_def_agl);
-  if (encounter.player_fled)
+  encounter.player_fled = !chased || roll_flee(player.agl, max_def_agl);
+  if (encounter.player_fled) {
     sprintf(battle_post_message, str_battle_player_flee_success);
-  else
+  } else {
     sprintf(battle_post_message, str_battle_player_flee_failure);
+    SFX_FAIL;
+  }
 }
 
 Encounter encounter = {
