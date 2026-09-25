@@ -663,7 +663,6 @@ void reset_encounter(MonsterLayout layout) NONBANKED {
   encounter.xp_reward = 0;
   encounter.item_id = ITEM_INVALID;
   encounter.victory = false;
-  encounter.is_final_boss = false;
   reset_status_effects(encounter.player_status_effects);
   reset_special();
 

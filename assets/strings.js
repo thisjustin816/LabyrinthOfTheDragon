@@ -270,6 +270,7 @@ addNamespace('floor7', 2, {
 addNamespace('floor8', 2, {
   'boss': 'Finally, I have awaited this...',
   'elite': 'STARING EVEN MORE',
+  'stairs_open': 'The dragon is slain! An ancient stairway opens above.',
   'healing_mirror': 'You look in the mirror and your wounds vanish!',
   'healing_mirror_none': 'The mirror has lost its luster...',
 });

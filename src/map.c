@@ -10,6 +10,7 @@
 
 #include "battle.h"
 #include "core.h"
+#include "credits.h"
 #include "floor.h"
 #include "main_menu.h"
 #include "map.h"
@@ -1367,6 +1368,10 @@ static void quit_to_title(void) {
   game_state = GAME_STATE_TITLE;
 }
 
+void map_start_credits(void) BANKED {
+  map_fade_out(MAP_STATE_CREDITS);
+}
+
 /**
  * Loads a map data tile at the given position in the current map.
  *
@@ -2658,6 +2663,15 @@ void update_map(void) {
     return;
   case MAP_STATE_QUIT:
     quit_to_title();
+    return;
+  case MAP_STATE_CREDITS:
+    leave_world_map();
+    // init_credits() is NONBANKED and switches to bank 1 without switching
+    // back (src/credits.c), so this must stay the last thing this case
+    // does: any line added after it here would run from bank 1 instead of
+    // this file's own bank 2, which is only harmless today because nothing
+    // does.
+    init_credits();
     return;
   case MAP_STATE_INITIATE_BATTLE:
     init_timer(battle_wait_timer, 30);

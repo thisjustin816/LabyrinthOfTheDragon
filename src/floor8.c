@@ -1,8 +1,8 @@
 #pragma bank 8
 
 #include "core.h"
-#include "credits.h"
 #include "floor.h"
+#include "save.h"
 #include "sound.h"
 
 //------------------------------------------------------------------------------
@@ -397,7 +397,18 @@ static void on_elite_victory(void) BANKED {
   set_npc_invisible(NPC_2);
 }
 
-static bool on_boss_encouter(void) {
+/**
+ * The dragon is dead: it leaves the chamber and the staircase door behind it
+ * opens. Stepping onto the stairs finishes the game (see `on_move`).
+ */
+static void on_dragon_victory(void) BANKED {
+  set_npc_invisible(NPC_1);
+  open_door(DOOR_2);
+  play_sound(sfx_big_door_open);
+  map_textbox(str_floor8_stairs_open);
+}
+
+static bool on_boss_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   dragon_generator(monster, 60, A_TIER);
@@ -417,16 +428,18 @@ static bool on_boss_encouter(void) {
   monster_reset_stats(monster);
 
   monster->id = 'A';
-  encounter.is_final_boss = true;
+  monster->can_flee = false;
+  set_on_victory(on_dragon_victory);
   start_battle();
   return true;
 }
 
-static bool on_elite_encouter(void) {
+static bool on_elite_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   beholder_generator(monster, 55, B_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_elite_victory);
   start_battle();
   return true;
@@ -436,11 +449,11 @@ static bool on_npc_action(const NPC *npc) {
   switch (npc->id) {
   case NPC_1:
     play_sound(sfx_monster_attack2);
-    map_textbox_with_action(str_floor8_boss, on_boss_encouter);
+    map_textbox_with_action(str_floor8_boss, on_boss_encounter);
     return true;
   case NPC_2:
     play_sound(sfx_monster_attack1);
-    map_textbox_with_action(str_floor8_elite, on_elite_encouter);
+    map_textbox_with_action(str_floor8_elite, on_elite_encounter);
     return true;
   }
   return false;
@@ -516,6 +529,15 @@ static bool on_special(void) {
 }
 
 static bool on_move(void) {
+  // The staircase behind the dragon (an open door tile, so it never reaches
+  // on_special): mark the game cleared, save it to the slot so the save select
+  // shows it, and roll the credits.
+  if (player_at(8, 1) && is_door_open(DOOR_2)) {
+    set_flags(FLAGS_GAME, FLAG_GAME_COMPLETE);
+    save_write(active_save_slot);
+    map_start_credits();
+    return true;
+  }
   return false;
 }
 

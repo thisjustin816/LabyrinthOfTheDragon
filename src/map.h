@@ -449,6 +449,11 @@ typedef enum MapState {
    * display is handed to the title screen.
    */
   MAP_STATE_QUIT,
+  /**
+   * The game was finished on the map (floor 8's staircase) and the fade out
+   * has finished: the display is handed to the credits.
+   */
+  MAP_STATE_CREDITS,
 } MapState;
 
 /**
@@ -1447,6 +1452,11 @@ inline bool is_chest_locked(ChestId id) {
 inline bool is_lever_on(LeverId id) {
   return flags_lever_on & id;
 }
+
+/**
+ * Fades the map out and rolls the credits (the ending). For floor scripts.
+ */
+void map_start_credits(void) BANKED;
 
 /**
  * Changes the state of the lever to "on". This has no effect on the graphics
