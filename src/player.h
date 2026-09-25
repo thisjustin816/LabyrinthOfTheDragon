@@ -96,6 +96,9 @@ typedef enum SpecialFlags {
   SPECIAL_HASTE = FLAG(1),
   SPECIAL_EVASION = FLAG(2),
   SPECIAL_SLEET_STORM = FLAG(3),
+  // Only ever in a monster's special_immune: Trip Attack and Open Palm can't
+  // knock it down.
+  SPECIAL_TRIP = FLAG(4),
   SPECIAL_INSTANT_KILL = FLAG(7),
 } SpecialFlags;
 

@@ -300,7 +300,7 @@ static bool on_elite_encounter(void) {
 static bool on_npc_action(const NPC *npc) {
   switch (npc->id) {
   case NPC_1:
-    if (player.level < 45) {
+    if (player.level < 34) {
       map_textbox(str_floor6_boss_not_yet);
       return true;
     }

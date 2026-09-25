@@ -294,7 +294,7 @@ static void on_elite_victory(void) BANKED {
 static bool on_boss_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
-  deathknight_generator(monster, 39, B_TIER);
+  deathknight_generator(monster, 39, S_TIER);
   monster->id = 'A';
   monster->can_flee = false;
   set_on_victory(on_boss_victory);
@@ -316,7 +316,7 @@ static bool on_elite_encounter(void) {
 static bool on_npc_action(const NPC *npc) {
   switch (npc->id) {
   case NPC_1:
-    if (player.level < 40) {
+    if (player.level < 32) {
       map_textbox(str_floor5_boss_not_yet);
       return true;
     }

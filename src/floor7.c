@@ -307,8 +307,10 @@ static void on_boss_victory(void) BANKED {
 static void on_elite_victory(void) BANKED {
   set_npc_invisible(NPC_2);
   add_items(ITEM_HASTE, 1);
+  add_items(ITEM_ATK_UP, 1);
+  add_items(ITEM_DEF_UP, 1);
   play_sound(sfx_big_powerup);
-  map_textbox(str_chest_item_haste_pot);
+  map_textbox(str_chest_item_haste_atkup_defup);
 }
 
 static bool on_boss_encounter(void) {
@@ -336,7 +338,7 @@ static bool on_elite_encounter(void) {
 static bool on_npc_action(const NPC *npc) {
   switch (npc->id) {
   case NPC_1:
-    if (player.level < 45) {
+    if (player.level < 36) {
       map_textbox(str_floor7_boss_not_yet);
       return true;
     }

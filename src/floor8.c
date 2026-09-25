@@ -341,6 +341,21 @@ static bool on_boss_encouter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   dragon_generator(monster, 60, A_TIER);
+
+  // The dragon fights at A-tier but carries the S-tier HP row. Three of the
+  // four classes' finishers out-damage the A-tier row in a single cast, so the
+  // fight ends before the legendary actions it is built around ever come up.
+  // Moving only the HP buys a second beat without changing what the dragon can
+  // do back: its damage, its legendary charge count and its XP reward all read
+  // exp_tier, which stays A_TIER.
+  //
+  // monster_reset_stats() re-derives target_hp from hp. The HP bar animates
+  // toward target_hp rather than hp, so setting the two HP fields alone would
+  // leave the bar chasing the old value.
+  monster->max_hp = get_monster_hp(60 + 20, S_TIER);
+  monster->hp = monster->max_hp;
+  monster_reset_stats(monster);
+
   monster->id = 'A';
   encounter.is_final_boss = true;
   start_battle();

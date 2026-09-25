@@ -251,9 +251,9 @@ static void bugbear_take_turn(Monster *monster) {
   ) {
     sprintf(battle_pre_message, str_monster_bugbear_for_hruggek, monster->id);
     if (roll_attack_monster(monster->atk, player.mdef)) {
-      // The roar spends its charge even when the fear doesn't take hold (a
-      // stronger fear is active or every effect slot is full). Only the text
-      // and sound depend on whether it stuck.
+      // The roar still lands and the charge is still spent even when the
+      // fear itself is blocked (e.g. Still Mind); only the text and sound
+      // depend on whether it actually stuck.
       StatusEffectResult result = apply_scared(
         encounter.player_status_effects, C_TIER, 2, player.debuff_immune);
       monster->parameter--;
@@ -492,7 +492,7 @@ void gelatinous_cube_generator(
   m->aspect_vuln = DAMAGE_MAGICAL;
   m->debuff_immune =
     FLAG_DEBUFF_POISONED | FLAG_DEBUFF_BLIND | FLAG_DEBUFF_SCARED;
-  m->special_immune = SPECIAL_SLEET_STORM;
+  m->special_immune = SPECIAL_SLEET_STORM | SPECIAL_TRIP;
 
   // Number of times they can execute the "consume" ability
   m->parameter = tier < A_TIER ? 1 : 2;

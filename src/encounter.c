@@ -429,7 +429,7 @@ inline void monster_turn(void) {
     monster->trip_turns == 0
   ) {
     uint8_t slip_chance = 3;
-    if (player.level > 60)
+    if (player.level > 50)
       slip_chance = 5;
     else if (player.level > 40)
       slip_chance = 4;
@@ -675,6 +675,12 @@ void reset_encounter(MonsterLayout layout) NONBANKED {
 
   player.aspect_resist = 0;
   player.trip_turns = 0;
+  player.debuff_immune = 0;
+
+  // The last fight's effects are gone from the list, so its stats and flags go
+  // too: round 1's initiative, and any monster that moves first, read them
+  // before the hero's first turn.
+  refresh_player_stats();
 }
 
 /**
@@ -712,8 +718,6 @@ StatusEffectInstance *get_effect_slot(
   PowerTier tier,
   uint8_t duration
 ) {
-  (void)duration;
-
   StatusEffectInstance *e;
   StatusEffect opposing = get_opposing_effect(effect);
 
@@ -742,8 +746,13 @@ StatusEffectInstance *get_effect_slot(
     if (e->tier > tier)
       return NULL;
 
-    // if the version is perpetual, then do nothing
-    if (e->duration == EFFECT_DURATION_PERPETUAL)
+    // if the version is perpetual, only a stronger perpetual one replaces it:
+    // a timed one would end it early, and an equal one would spend a potion
+    // for nothing
+    if (
+      e->duration == EFFECT_DURATION_PERPETUAL &&
+      (duration != EFFECT_DURATION_PERPETUAL || e->tier == tier)
+    )
       return NULL;
 
     // if there is a less or equally powerful version: replace it

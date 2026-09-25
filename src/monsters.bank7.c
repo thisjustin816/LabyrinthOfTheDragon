@@ -87,9 +87,10 @@ void mindflayer_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
     m, MONSTER_MINDFLAYER, str_misc_mind_flayer, &mindflayer_tileset,
     level, tier);
 
-  m->max_hp = get_monster_hp(level_offset(level, 10), S_TIER);
-  m->atk = get_monster_atk(level_offset(level, 5), tier);
-  m->mdef = get_monster_def(level_offset(level, 5), tier);
+  m->max_hp = get_monster_hp(level_offset(level, 10), tier);
+  m->hp = m->max_hp;
+  m->atk_base = get_monster_atk(level_offset(level, 5), tier);
+  m->mdef_base = get_monster_def(level_offset(level, 5), tier);
   m->aspect_resist |= DAMAGE_MAGICAL;
 
   m->palette = mindflayer_palettes + tier * 4;
@@ -256,9 +257,10 @@ void beholder_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
   m->exp_level = level_offset(level, 10);
 
   m->max_hp = get_monster_hp(level_offset(level, 10), tier);
-  m->atk = get_monster_atk(level_offset(level, 5), tier);
-  m->matk = get_monster_atk(level_offset(level, 7), tier);
-  m->agl = get_agl(level_offset(level, -4), tier);
+  m->hp = m->max_hp;
+  m->atk_base = get_monster_atk(level_offset(level, 5), tier);
+  m->matk_base = get_monster_atk(level_offset(level, 7), tier);
+  m->agl_base = get_agl(level_offset(level, -4), tier);
 
   const uint8_t eye_ray_tries[4] = { 1, 2, 3, 4 };
   m->parameter = eye_ray_tries[m->exp_tier];
@@ -476,6 +478,7 @@ void dragon_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
   m->take_turn = dragon_take_turn;
 
   m->exp_level = level_offset(level, 20);
+  m->special_immune = SPECIAL_INSTANT_KILL | SPECIAL_TRIP;
   m->max_hp = get_monster_hp(level_offset(level, 20), tier);
   m->hp = m->max_hp;
 

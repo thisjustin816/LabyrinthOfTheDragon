@@ -158,7 +158,7 @@ addNamespace('player', 4, {
   'monk_open_palm': 'You strike with an open palm!',
   'monk_open_palm_trip': 'You trip %monster %c!',
   'monk_still_mind': 'You become one with the multiverse...',
-  'monk_still_mind_post': 'And are healed of all ill effects!',
+  'monk_still_mind_post': 'Healed of all ills, and beyond fear.',
   'monk_flurry_of_blows': 'You attack with a flurry of blows!',
   'monk_diamond_body': 'You become tough as diamond.',
   'monk_quivering_palm': 'You attack their very essence!',
@@ -330,6 +330,7 @@ addNamespace('chest_item', 2, {
   '1atkup_1defup': 'You get an ATK& and DEF&!',
   '3elixirs': 'You get 3 elixirs!',
   '3haste': 'You get 3 haste potions!',
+  'haste_atkup_defup': 'You get a haste potion, an ATK&, and a DEF&!',
 });
 
 addNamespace('items', 3, {

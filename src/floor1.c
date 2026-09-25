@@ -232,7 +232,7 @@ static bool on_npc_action(const NPC *npc) {
   if (npc->id != NPC_1)
     return false;
 
-  if (player.level < 10) {
+  if (player.level < 8) {
     map_textbox(str_maps_boss_not_yet);
     return true;
   }

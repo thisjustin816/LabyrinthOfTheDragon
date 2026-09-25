@@ -95,7 +95,9 @@ typedef enum DebuffFlag {
 
 
 /**
- * Denotes that a status effect never ends.
+ * Denotes that a status effect never ends. Any other duration counts down once
+ * per turn of the entity carrying the effect, and a duration of 0 ends it at
+ * that entity's next turn, before it has had any effect.
  */
 #define EFFECT_DURATION_PERPETUAL 0xFF
 

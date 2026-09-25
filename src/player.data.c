@@ -30,32 +30,32 @@ const palette_color_t hero_colors[16] = {
 
 const Ability druid0 = {
   1, str_ability_druid_cure_wounds,
-  TARGET_SELF, 4, druid_cure_wounds,
+  TARGET_SELF, 3, druid_cure_wounds,
 };
 
 const Ability druid1 = {
   2, str_ability_druid_bark_skin,
-  TARGET_SELF, 8, druid_bark_skin,
+  TARGET_SELF, 6, druid_bark_skin,
 };
 
 const Ability druid2 = {
   3, str_ability_druid_lightning,
-  TARGET_SINGLE, 15, druid_lightning,
+  TARGET_SINGLE, 9, druid_lightning,
 };
 
 const Ability druid3 = {
    4, str_ability_druid_heal,
-   TARGET_SELF, 19, druid_heal,
+   TARGET_SELF, 12, druid_heal,
 };
 
 const Ability druid4 = {
    5, str_ability_druid_insect_plague,
-   TARGET_ALL, 28, druid_insect_plague,
+   TARGET_ALL, 15, druid_insect_plague,
 };
 
 const Ability druid5 = {
    6, str_ability_druid_regen,
-   TARGET_SELF, 33, druid_regen
+   TARGET_SELF, 19, druid_regen
 };
 
 //------------------------------------------------------------------------------
@@ -94,7 +94,7 @@ const Ability fighter5 = {
 
 const Ability monk0 = {
   1, str_ability_monk_evasion,
-  TARGET_SELF, 7, monk_evasion
+  TARGET_SELF, 5, monk_evasion
 };
 
 const Ability monk1 = {
@@ -104,22 +104,22 @@ const Ability monk1 = {
 
 const Ability monk2 = {
   3, str_ability_monk_still_mind,
-  TARGET_SELF, 13, monk_still_mind
+  TARGET_SELF, 14, monk_still_mind
 };
 
 const Ability monk3 = {
   4, str_ability_monk_flurry,
-  TARGET_SINGLE, 19, monk_flurry
+  TARGET_SINGLE, 18, monk_flurry
 };
 
 const Ability monk4 = {
   5, str_ability_monk_diamond_body,
-  TARGET_SELF, 15, monk_diamond_body
+  TARGET_SELF, 23, monk_diamond_body
 };
 
 const Ability monk5 = {
   6, str_ability_monk_quivering_palm,
-  TARGET_SINGLE, 30, monk_quivering_palm
+  TARGET_SINGLE, 29, monk_quivering_palm
 };
 
 //------------------------------------------------------------------------------
@@ -131,27 +131,27 @@ const Ability sorcerer0 = {
 
 const Ability sorcerer1 = {
   2, str_ability_sorc_fireball,
-  TARGET_ALL, 12, sorcerer_fireball
+  TARGET_ALL, 8, sorcerer_fireball
 };
 
 const Ability sorcerer2 = {
   3, str_ability_sorc_haste,
-  TARGET_SELF, 15, sorcerer_haste
+  TARGET_SELF, 12, sorcerer_haste
 };
 
 const Ability sorcerer3 = {
   4, str_ability_sorc_sleetstorm,
-  TARGET_ALL, 20, sorcerer_sleetstorm
+  TARGET_ALL, 15, sorcerer_sleetstorm
 };
 
 const Ability sorcerer4 = {
   5, str_ability_sorc_disintegrate,
-  TARGET_SINGLE, 28, sorcerer_disintegrate
+  TARGET_SINGLE, 20, sorcerer_disintegrate
 };
 
 const Ability sorcerer5 = {
   6, str_ability_sorc_wild_magic,
-  TARGET_ALL, 33, sorcerer_wild_magic
+  TARGET_ALL, 25, sorcerer_wild_magic
 };
 
 //------------------------------------------------------------------------------

@@ -304,7 +304,7 @@ static bool on_npc_action(const NPC *npc) {
     map_textbox_with_action(str_floor2_elite_msg, elite_encounter);
     return true;
   case NPC_2:
-    if (player.level < 17) {
+    if (player.level < 15) {
       map_textbox(str_maps_boss_not_yet);
       return true;
     }
