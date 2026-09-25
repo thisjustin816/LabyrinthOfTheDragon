@@ -50,8 +50,8 @@ static const Chest chests[] = {
   { CHEST_6, MAP_A, 28, 4, true, true, str_chest_item_3ethers, chest_item_3ethers },
 
   // Secret Boss Room
-  { CHEST_7, MAP_B, 11, 3, false, false, str_chest_item_1pots, chest_item_1pot },
-  { CHEST_8, MAP_B, 13, 3, false, false, str_chest_item_1eths, chest_item_1eth },
+  { CHEST_7, MAP_B, 11, 3, false, false, str_chest_item_1pot, chest_item_1pot },
+  { CHEST_8, MAP_B, 13, 3, false, false, str_chest_item_1eth, chest_item_1eth },
 
   // Treasure Room Chests
   { END },

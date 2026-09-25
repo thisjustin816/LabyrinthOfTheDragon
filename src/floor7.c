@@ -68,7 +68,7 @@ static const Chest chests[] = {
     floor7_chest_on_open
   },
   { CHEST_7, MAP_A, 30, 22, false, false, str_chest_item_regen_pot, chest_item_regen_pot },
-  { CHEST_8, MAP_A, 25, 18, false, false, str_chest_item_1pots, chest_item_1pot },
+  { CHEST_8, MAP_A, 25, 18, false, false, str_chest_item_1pot, chest_item_1pot },
 
   { END },
 };

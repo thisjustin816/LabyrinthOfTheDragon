@@ -29,9 +29,10 @@ const params = {
     code: '%s',
     max: 5,
   },
+  // The longest monster names: Gelatinous Cube and Displacer Beast.
   '%monster': {
     code: '%s',
-    max: 9,
+    max: 15,
   },
   '%c': {
     code: '%c',
@@ -182,25 +183,63 @@ function encodeString(namespace, key, str, debugOn=false) {
     }
   }
 
+  // A line breaks only at a space: a symbol or parameter written against a
+  // word, like the ellipsis in "it..." or the "!" in "%c!", moves down with
+  // that word instead of starting a line of its own. A line break takes no
+  // column, and a space the break falls on is dropped.
+  let wordStart = 0;
+  let wordLength = 0;
+  let afterBreak = true;
+
   imr.forEach(rep => {
     debug('Compiling IMR', rep);
 
     // Don't try to line-wrap on a newline character.
     if (rep.encoded == "\\n") {
-      currentLineLen = 0;
       result += '\\n';
       addLength(1);
+      currentLineLen = 0;
+      afterBreak = true;
       return;
     }
 
+    const isSpace = rep.type == 'text' && /^ +$/.test(rep.token);
+    const isBreak = isSpace || rep.type == 'control';
+    const joinsWord = !isBreak && !afterBreak;
+
     if (currentLineLen + rep.length > maxLineLength) {
       debug('Line length exceeded, adding \\n');
-      currentLineLen = 0;
-      result += '\\n';
-      addLength(1);
+      if (
+        joinsWord &&
+        wordLength < currentLineLen &&
+        wordLength + rep.length <= maxLineLength
+      ) {
+        result = result.substring(0, wordStart) + '\\n' +
+          result.substring(wordStart);
+        addLength(1);
+        currentLineLen = wordLength;
+        wordStart += 2;
+      } else {
+        result += '\\n';
+        addLength(1);
+        currentLineLen = 0;
+        if (isSpace) {
+          afterBreak = true;
+          return;
+        }
+        wordStart = result.length;
+        wordLength = 0;
+      }
+    }
+
+    if (!joinsWord) {
+      wordStart = result.length;
+      wordLength = 0;
     }
     addLength(rep.length);
     result += rep.encoded;
+    wordLength += rep.length;
+    afterBreak = isBreak;
   })
 
   return result

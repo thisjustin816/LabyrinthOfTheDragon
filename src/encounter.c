@@ -292,6 +292,8 @@ inline void player_turn(void) {
       const uint16_t poison = poison_hp(effect->tier, player.max_hp);
       if (player.hp <= poison) {
         player.hp = 0;
+        sprintf(battle_pre_message, str_battle_player_poison_death);
+        SKIP_POST_MSG;
         return;
       }
       else

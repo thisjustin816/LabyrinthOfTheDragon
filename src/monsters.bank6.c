@@ -24,7 +24,7 @@ static void kobold_take_turn(Monster *m) {
   // Kobolds sometimes space out entirely
   if (move_roll >= daze_chance[m->exp_tier]) {
     sprintf(battle_pre_message, str_monster_kobold_dazed, m->id);
-    SKIP_POST_MSG;
+    sprintf(battle_post_message, str_monster_kobold_does_nothing);
     SFX_FAIL;
     return;
   }

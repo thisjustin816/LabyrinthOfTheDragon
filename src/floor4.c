@@ -43,14 +43,14 @@ static const Chest chests[] = {
   {
     CHEST_1,
     MAP_A, 12, 28, false, false,
-    str_chest_item_1pots,
+    str_chest_item_1pot,
     chest_item_1pot,
   },
   // Secret 2
   {
     CHEST_2,
     MAP_A, 3, 28, false, false,
-    str_chest_item_1eths,
+    str_chest_item_1eth,
     chest_item_1eth,
   },
   // West Wing Chest

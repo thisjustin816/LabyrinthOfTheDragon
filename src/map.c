@@ -2280,6 +2280,7 @@ static bool check_doors(void) {
       player.magic_keys--;
       open_door(door->id);
       play_sound(sfx_door_unlock);
+      map_textbox(str_maps_door_unlock_key);
     } else {
       map_textbox(str_maps_door_locked_key);
     }

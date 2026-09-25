@@ -66,7 +66,7 @@ static const Chest chests[] = {
   {
     CHEST_5,
     MAP_B, 29, 3, false, false,
-    str_chest_item_1pots,
+    str_chest_item_1pot,
     chest_item_1pot
   },
   { END },
