@@ -423,8 +423,12 @@ static void dragon_take_turn(Monster *monster) {
     // Zero is an evaded hit, which damage_player() has already announced.
     if (damage == 0)
       return;
-    if (hit)
+    // A landed breath roars with the title screen's fire, over the hit or
+    // critical sound damage_player() picked.
+    if (hit) {
+      SFX_FIRE;
       return;
+    }
 
     sprintf(battle_post_message, str_monster2_dragon_fire_breath_miss, damage);
     SFX_MISS;

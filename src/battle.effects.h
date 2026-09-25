@@ -21,6 +21,11 @@
 #define SFX_MAGIC battle_sfx = sfx_monster_attack2
 
 /**
+ * Plays the "fire" sound during battle: the title screen's dragon fire.
+ */
+#define SFX_FIRE battle_sfx = sfx_title_fire
+
+/**
  * Plays the "action failed" sound during battle.
  */
 #define SFX_FAIL battle_sfx = sfx_monster_fail
