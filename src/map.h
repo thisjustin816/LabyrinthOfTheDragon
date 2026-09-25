@@ -1202,7 +1202,7 @@ void init_world_map(void) NONBANKED;
 /**
  * Update callback for the world map controller.
  */
-void update_world_map(void);
+void update_world_map(void) NONBANKED;
 
 /**
  * VBLANK draw routine for the world map controller.
@@ -1409,7 +1409,7 @@ inline bool is_lever_on(LeverId id) {
  * for the level.
  * @param lever The lever to toggle.
  */
-inline bool toggle_lever_state(LeverId id) {
+inline void toggle_lever_state(LeverId id) {
   flags_lever_on ^= id;
   *debug = flags_lever_on;
 }

@@ -91,7 +91,7 @@ void generate_monster(
   }
 }
 
-void generate_encounter(const EncounterTable *table) {
+void generate_encounter(const EncounterTable *table) NONBANKED {
   uint16_t odds = 0;
   uint8_t roll = d256();
 

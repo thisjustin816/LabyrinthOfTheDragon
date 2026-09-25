@@ -351,7 +351,7 @@ const uint8_t sfx_melee_attack_nr14[] = {
   SOUND_END
 };
 
-const void sfx_melee_attack(void) {
+void sfx_melee_attack(void) {
   NR41_REG = 63;
   register_init(&nr42, sfx_melee_attack_nr42);
   register_init(&nr43, sfx_melee_attack_nr43);

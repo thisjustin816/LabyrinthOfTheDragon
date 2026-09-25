@@ -265,7 +265,7 @@ void beholder_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
 #define DRAGON_FRIGHT_MASK     0b00001100
 #define DRAGON_LEGEND_MASK     0b00000011
 
-inline uint8_t init_dragon_parameter(
+inline void init_dragon_parameter(
   Monster *m,
   bool firebreath,
   uint8_t fright_actions,

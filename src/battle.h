@@ -419,7 +419,7 @@ extern BattleMenu battle_menu;
 /**
  * Initializes the battle system.
  */
-void init_battle(void);
+void init_battle(void) NONBANKED;
 
 /**
  * Executed when battle is complete and before transitioning back to map mode.
@@ -429,12 +429,12 @@ void cleanup_battle(void);
 /**
  * Game loop update for the battle system.
  */
-void update_battle(void);
+void update_battle(void) NONBANKED;
 
 /**
  * VBLANK draw updates for the battle system.
  */
-void draw_battle(void);
+void draw_battle(void) NONBANKED;
 
 /**
  * Shows the battle text box.

@@ -45,7 +45,7 @@ inline bool has_beaten(MiniBoss b) {
   return mini_bosses_defeated & b;
 }
 
-inline bool set_beaten(MiniBoss b) {
+inline void set_beaten(MiniBoss b) {
   mini_bosses_defeated |= b;
   *(debug + 0x20) = mini_bosses_defeated;
 }
@@ -402,7 +402,7 @@ inline bool check_mini_boss_tile(MiniBoss b, uint8_t x, uint8_t y) {
   return false;
 }
 
-inline bool use_healing_mirror(HealingMirrorId id) {
+inline void use_healing_mirror(HealingMirrorId id) {
   healing_mirrors_used |= id;
 }
 

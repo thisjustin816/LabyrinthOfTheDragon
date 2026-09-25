@@ -19,21 +19,20 @@ uint8_t joypad_pressed;
 uint8_t joypad_released;
 
 /**
- * Enumerates initial game modes. These are used in testing and development to
- * immediately jump to a specific test state.
+ * Initial game modes. The test modes jump straight to a development state.
  */
-typedef enum InitialGameMode {
-  GAME_MODE_NORMAL,
-  GAME_MODE_HERO_SELECT,
-  GAME_MODE_TEST_LEVEL,
-  GAME_MODE_TEST_BATTLE,
-  GAME_MODE_TEST_CREDITS,
-} InitialGameMode;
+#define GAME_MODE_NORMAL 1
+#define GAME_MODE_HERO_SELECT 2
+#define GAME_MODE_TEST_LEVEL 3
+#define GAME_MODE_TEST_BATTLE 4
+#define GAME_MODE_TEST_CREDITS 5
 
 /**
- * Determines the initial game mode for the game.
+ * Selects the initial game mode, one of the GAME_MODE_* values above. A switch
+ * on a const variable would compile the other modes as unreachable code, which
+ * SDCC warns about, so the preprocessor picks the mode.
  */
-const InitialGameMode initial_mode = GAME_MODE_NORMAL;
+#define INITIAL_MODE GAME_MODE_NORMAL
 
 /**
  * Uncomment to enable sound effect testing when pressing the 'B' button.
@@ -55,25 +54,21 @@ static inline void initialize(void) {
   initarand(RANDOM_SEED);
   hide_window();
 
-  switch (initial_mode) {
-  case GAME_MODE_NORMAL:
-    init_title_screen();
-    game_state = GAME_STATE_TITLE;
-    break;
-  case GAME_MODE_HERO_SELECT:
-    init_hero_select();
-    game_state = GAME_STATE_HERO_SELECT;
-    break;
-  case GAME_MODE_TEST_LEVEL:
-    test_level();
-    break;
-  case GAME_MODE_TEST_BATTLE:
-    test_battle();
-    break;
-  case GAME_MODE_TEST_CREDITS:
-    init_credits();
-    break;
-  }
+#if INITIAL_MODE == GAME_MODE_NORMAL
+  init_title_screen();
+  game_state = GAME_STATE_TITLE;
+#elif INITIAL_MODE == GAME_MODE_HERO_SELECT
+  init_hero_select();
+  game_state = GAME_STATE_HERO_SELECT;
+#elif INITIAL_MODE == GAME_MODE_TEST_LEVEL
+  test_level();
+#elif INITIAL_MODE == GAME_MODE_TEST_BATTLE
+  test_battle();
+#elif INITIAL_MODE == GAME_MODE_TEST_CREDITS
+  init_credits();
+#else
+#error "INITIAL_MODE must be one of the GAME_MODE_* values"
+#endif
 }
 
 /**

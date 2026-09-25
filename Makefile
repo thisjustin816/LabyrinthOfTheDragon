@@ -30,14 +30,31 @@ SRC_FILES = $(wildcard $(SRC_DIR)/*.c)
 DATA_FILES = $(wildcard $(DATA_DIR)/*.c)
 OBJ_FILES = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRC_FILES)) \
 	$(patsubst $(DATA_DIR)/%.c,$(OBJ_DIR)/%.o,$(DATA_FILES))
+# Headers every object depends on, so that editing one rebuilds what includes
+# it. Otherwise the linked ROM can mix objects compiled against different
+# versions of a header, such as an enum whose values shifted. src/strings.h is
+# rewritten by every `make assets`, so it is left out; depending on it would
+# turn every build into a full rebuild.
+HDR_FILES = $(filter-out $(SRC_DIR)/strings.h,$(wildcard $(SRC_DIR)/*.h))
+
 MAP_FILES = $(wildcard $(RES_DIR)/maps/%.tilemap)
 TILEMAP_FILES = $(wildcard $(RES_DIR)/tilemaps/%.tilemap)
 TILEPNG := $(wildcard assets/tiles/*.png)
 TILEBIN := $(subst assets/,res/,$(patsubst %.png,%.bin,$(TILEPNG)))
 
-.PHONY: all clean usage assets data
+.PHONY: all clean usage assets data rom
 
-all: assets data $(BIN)
+# Two passes, on purpose. SRC_FILES and DATA_FILES above are wildcards, and make
+# expands them while parsing, before any recipe runs. In a fresh clone, or after
+# `make clean` has deleted the generated src/tables.c and data/strings_*.bank*.c,
+# a single pass parses the Makefile with those files absent and links a ROM
+# without its stat and string tables. Generating the assets in this pass and
+# compiling in a sub-make means the wildcards are expanded after the generated
+# sources exist.
+all: assets
+	@$(MAKE) --no-print-directory rom
+
+rom: data $(BIN)
 
 assets: asset_dirs strings tables $(TILEBIN)
 
@@ -56,13 +73,13 @@ res/tiles/%.bin: assets/tiles/%.png
 $(BIN): $(OBJ_FILES)
 	$(LCC) $(LCCFLAGS) -o $@ $^
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(HDR_FILES) | $(OBJ_DIR)
 	$(LCC) $(LCCFLAGS) -c $< -o $@
 
 data:
 	touch $(DATA_DIR)/*.c
 
-$(OBJ_DIR)/%.o: $(DATA_DIR)/%.c | $(OBJ_DIR)
+$(OBJ_DIR)/%.o: $(DATA_DIR)/%.c $(HDR_FILES) | $(OBJ_DIR)
 	$(LCC) $(LCCFLAGS) -c $< -o $@
 
 $(OBJ_DIR):
@@ -72,7 +89,7 @@ usage:
 	~/gbdk/bin/romusage $(BIN)
 
 clean:
-	rm -f *.o *.lst *.map *.gb *.ihx *.sym *.cdb *.adb *.asm *.noi *.rst
+	rm -f *.o *.lst *.map *.gb *.gbc *.ihx *.sym *.cdb *.adb *.asm *.noi *.rst
 	rm -f res/tiles/*.bin res/tiles/manifest.json
 	rm -f res/color_tables/*.bin res/color_tables/manifest.json
 	rm -f data/strings_*bank*.c

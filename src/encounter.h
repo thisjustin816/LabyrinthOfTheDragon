@@ -223,7 +223,7 @@ bool check_random_encounter(void);
  * Generates a random encounter from the given encounter table.
  * @param table Table to use when generating the encounter.
  */
-void generate_encounter(EncounterTable *table) NONBANKED;
+void generate_encounter(const EncounterTable *table) NONBANKED;
 
 /**
  * Sets the player's next action to a basic attack.
@@ -287,7 +287,7 @@ bool is_battle_over(void);
 /**
  * Resets the encounter so it can be reconfigured for another battle.
  */
-void reset_encounter(MonsterLayout layout);
+void reset_encounter(MonsterLayout layout) NONBANKED;
 
 /**
  * @return The monster at the given index.

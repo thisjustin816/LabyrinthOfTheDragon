@@ -10,6 +10,14 @@ src/tables.c
 # Ignore all build files
 obj/
 *.ihx
+# Debug-build side files, such as the .noi that GBDK_DEBUG=ON make writes
+# next to the ROM. make clean removes these too.
+*.noi
+*.cdb
+*.adb
+*.lst
+*.rst
+*.sym
 
 # Prerequisites
 *.d

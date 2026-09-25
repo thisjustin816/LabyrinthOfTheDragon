@@ -68,7 +68,7 @@ bool floor7_chest_on_open(const Chest *chest);
 /**
  * Initializes the teleporter color animation.
  */
-void init_teleporter_animation(uint8_t p, palette_color_t *colors) NONBANKED;
+void init_teleporter_animation(uint8_t p, const palette_color_t *colors) NONBANKED;
 
 /**
  * Called to cycle the "bright" color of the given palette for the teleporter

@@ -7,6 +7,7 @@
 #include "core.h"
 #include "hero_select.h"
 #include "sound.h"
+#include "title_screen.h"
 
 #define MAX_ANIMATION_SPRITES 20
 
@@ -17,7 +18,7 @@ void init_neshacker_presents(void);
 void update_neshacker_presents(void);
 
 void init_main_title(void);
-void update_main_title(void);
+void update_main_title(void) NONBANKED;
 
 void init_fire_animation(void);
 void update_fire_animation(void);

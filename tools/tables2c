@@ -5,6 +5,20 @@ const path = require('path')
 
 const BANK = 5;
 
+/**
+ * Writes a generated file only when its contents differ from what is on disk.
+ * Every object depends on src/tables.h, so rewriting it unchanged would make
+ * each `make` recompile the whole tree.
+ */
+function writeIfChanged(file, contents) {
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === contents) {
+    console.log(`'${file}' is up to date`);
+    return;
+  }
+  console.log(`Writing '${file}'`);
+  fs.writeFileSync(file, contents);
+}
+
 try {
   console.log('Compiling table data...')
   const data = fs.readFileSync(path.resolve('assets/', 'tables.csv'))
@@ -66,8 +80,7 @@ try {
     '',
     '#endif',
   ].join('\n')
-  console.log(`Writing 'src/tables.h'`);
-  fs.writeFileSync(path.join('src/', 'tables.h'), header_file);
+  writeIfChanged(path.join('src/', 'tables.h'), header_file);
 
   let bytes = 0;
   tables.forEach(table => {
@@ -100,8 +113,7 @@ try {
       ].join('\n')
     }).join('\n')
   ].join('\n')
-  console.log(`Writing 'src/tables.c'`);
-  fs.writeFileSync(path.join('src/', 'tables.c'), c_file);
+  writeIfChanged(path.join('src/', 'tables.c'), c_file);
 
   // console.log(`Tables size: ${Math.ceil(bytes/1024)} KB (${bytes} bytes)`);
 } catch (err) {
