@@ -261,7 +261,7 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 
 static void on_boss_victory(void) BANKED {
@@ -274,7 +274,7 @@ static void on_elite_victory(void) BANKED {
   set_npc_invisible(NPC_2);
   teach_elite_ability(ABILITY_5);
 }
-static bool on_boss_encouter(void) {
+static bool on_boss_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   mindflayer_generator(monster, 45, A_TIER);
@@ -284,7 +284,7 @@ static bool on_boss_encouter(void) {
   return true;
 }
 
-static bool on_elite_encouter(void) {
+static bool on_elite_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   will_o_wisp_generator(monster, 43, B_TIER);
@@ -303,11 +303,11 @@ static bool on_npc_action(const NPC *npc) {
       return true;
     }
     play_sound(sfx_monster_attack2);
-    map_textbox_with_action(str_floor6_boss, on_boss_encouter);
+    map_textbox_with_action(str_floor6_boss, on_boss_encounter);
     return true;
   case NPC_2:
     play_sound(sfx_monster_attack1);
-    map_textbox_with_action(str_floor6_elite_attack, on_elite_encouter);
+    map_textbox_with_action(str_floor6_elite_attack, on_elite_encounter);
     return true;
   }
   return false;

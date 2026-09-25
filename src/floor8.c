@@ -328,7 +328,7 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 static void on_elite_victory(void) BANKED {
   current_mini_boss = MINI_BOSS_BEHOLDER;

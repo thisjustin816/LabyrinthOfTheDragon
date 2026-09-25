@@ -868,6 +868,37 @@ static void init_npcs(void) {
 }
 
 /**
+ * Positions and tiles the four sprites that make up a 16x16 NPC.
+ * @param sprite_root First of the NPC's four sprite ids.
+ * @param x Screen x for the top-left sprite.
+ * @param y Screen y for the top-left sprite.
+ * @param tile_root Tile for the top-left sprite; the others follow the 16-wide
+ *   layout of the monster tile pages.
+ */
+static void draw_npc(uint8_t sprite_root, uint8_t x, uint8_t y, uint8_t tile_root) {
+  move_sprite(sprite_root + 0, x, y);
+  move_sprite(sprite_root + 1, x + 8, y);
+  move_sprite(sprite_root + 2, x, y + 8);
+  move_sprite(sprite_root + 3, x + 8, y + 8);
+
+  set_sprite_tile(sprite_root, tile_root);
+  set_sprite_tile(sprite_root + 1, tile_root + 1);
+  set_sprite_tile(sprite_root + 2, tile_root + 0x10);
+  set_sprite_tile(sprite_root + 3, tile_root + 0x10 + 1);
+}
+
+/**
+ * Moves the four sprites of an NPC off screen.
+ * @param sprite_root First of the NPC's four sprite ids.
+ */
+static void hide_npc(uint8_t sprite_root) {
+  move_sprite(sprite_root + 0, 0, 0);
+  move_sprite(sprite_root + 1, 0, 0);
+  move_sprite(sprite_root + 2, 0, 0);
+  move_sprite(sprite_root + 3, 0, 0);
+}
+
+/**
  * Updates NPCs.
  */
 static void update_npcs(void) {
@@ -885,20 +916,23 @@ static void update_npcs(void) {
   ) {
     const uint8_t sprite_root = NPC_SPRITE_1 + 4 * pos;
 
+    // Tile offset of the NPC from the loaded window's origin. Maps are far
+    // smaller than 127 tiles across, so the 8-bit difference cannot wrap, and
+    // "on screen" is the single unsigned range check `-1 <= d < LOADS`.
+    const int8_t dx = npc->col - map_x;
+    const int8_t dy = npc->row - map_y;
 
     if (
       is_npc_visible(npc->id) &&
       npc->map_id == active_map->id &&
-      npc->col >= map_x - 1 &&
-      npc->col < map_x + MAP_HORIZ_LOADS &&
-      npc->row >= map_y - 1 &&
-      npc->row < map_y + MAP_VERT_LOADS
+      (uint8_t)(dx + 1) <= MAP_HORIZ_LOADS &&
+      (uint8_t)(dy + 1) <= MAP_VERT_LOADS
     ) {
       const uint8_t tile_root =
         NPC_1_TILE_ROOT + 0x20 * pos + npc_walk_frame;
 
-      uint8_t x = ((npc->col - map_x + 1) << 4) - 8;
-      uint8_t y = ((npc->row - map_y + 1) << 4);
+      uint8_t x = ((dx + 1) << 4) - 8;
+      uint8_t y = (dy + 1) << 4;
 
       if (map_state == MAP_STATE_MOVING) {
         switch (move_direction) {
@@ -917,21 +951,9 @@ static void update_npcs(void) {
         }
       }
 
-      move_sprite(sprite_root + 0, x, y);
-      move_sprite(sprite_root + 1, x + 8, y);
-      move_sprite(sprite_root + 2, x, y + 8);
-      move_sprite(sprite_root + 3, x + 8, y + 8);
-
-      set_sprite_tile(sprite_root, tile_root);
-      set_sprite_tile(sprite_root + 1, tile_root + 1);
-      set_sprite_tile(sprite_root + 2, tile_root + 0x10);
-      set_sprite_tile(sprite_root + 3, tile_root + 0x10 + 1);
-
+      draw_npc(sprite_root, x, y, tile_root);
     } else {
-      move_sprite(sprite_root + 0, 0, 0);
-      move_sprite(sprite_root + 1, 0, 0);
-      move_sprite(sprite_root + 2, 0, 0);
-      move_sprite(sprite_root + 3, 0, 0);
+      hide_npc(sprite_root);
     }
   }
 }

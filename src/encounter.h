@@ -214,8 +214,8 @@ inline void set_on_victory(void (*callback)(void) BANKED) {
 void config_random_encounter(uint8_t s, uint8_t ic, uint8_t i, bool ts);
 
 /**
- * Determines if a random encounter has occured.
- * @return `true` If a random encounter has occured.
+ * Determines if a random encounter has occurred.
+ * @return `true` If a random encounter has occurred.
  */
 bool check_random_encounter(void);
 

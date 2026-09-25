@@ -296,7 +296,7 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 static void on_boss_victory(void) BANKED {
   open_door(DOOR_1);
@@ -311,7 +311,7 @@ static void on_elite_victory(void) BANKED {
   map_textbox(str_chest_item_haste_pot);
 }
 
-static bool on_boss_encouter(void) {
+static bool on_boss_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   beholder_generator(monster, 54, A_TIER);
@@ -321,7 +321,7 @@ static bool on_boss_encouter(void) {
   return true;
 }
 
-static bool on_elite_encouter(void) {
+static bool on_elite_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   displacer_beast_generator(monster, 50, B_TIER);
@@ -339,11 +339,11 @@ static bool on_npc_action(const NPC *npc) {
       return true;
     }
     play_sound(sfx_monster_attack2);
-    map_textbox_with_action(str_floor7_boss, on_boss_encouter);
+    map_textbox_with_action(str_floor7_boss, on_boss_encounter);
     return true;
   case NPC_2:
     play_sound(sfx_monster_attack1);
-    map_textbox_with_action(str_floor7_elite_attack, on_elite_encouter);
+    map_textbox_with_action(str_floor7_elite_attack, on_elite_encounter);
     return true;
   }
   return false;

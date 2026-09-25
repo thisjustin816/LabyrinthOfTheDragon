@@ -104,7 +104,6 @@ static const Exit exits[] = {
   { MAP_A, 17, 6, MAP_A, 3, 5, UP, EXIT_STAIRS },
   { MAP_A, 3, 5, MAP_A, 17, 6, DOWN, EXIT_STAIRS },
 
-  // TODO Fix this to point to floor 4
   { MAP_A, 4, 12, MAP_A, 24, 30, UP, EXIT_STAIRS, &bank_floor4},
 
   {END},
@@ -213,7 +212,7 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 
 static void on_boss_victory(void) BANKED {
@@ -227,7 +226,7 @@ static void on_elite_victory(void) BANKED {
   teach_elite_ability(ABILITY_2);
 }
 
-static bool on_boss_encouter(void) {
+static bool on_boss_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   gelatinous_cube_generator(monster, 24, B_TIER);
@@ -237,7 +236,7 @@ static bool on_boss_encouter(void) {
   return true;
 }
 
-static bool on_elite_encouter(void) {
+static bool on_elite_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   zombie_generator(monster, 21, B_TIER);
@@ -255,11 +254,11 @@ static bool on_npc_action(const NPC *npc) {
       return true;
     }
     play_sound(sfx_monster_attack2);
-    map_textbox_with_action(str_floor3_boss, on_boss_encouter);
+    map_textbox_with_action(str_floor3_boss, on_boss_encounter);
     return true;
   case NPC_2:
     play_sound(sfx_monster_attack1);
-    map_textbox_with_action(str_floor3_brains, on_elite_encouter);
+    map_textbox_with_action(str_floor3_brains, on_elite_encounter);
     return true;
   }
   return false;

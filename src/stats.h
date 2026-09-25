@@ -490,7 +490,7 @@ inline bool is_fumble(uint8_t d16_roll) {
 /**
  * Calculates if a scared entity flees or not.
  * @param tier Tier of the scared debuff.
- * @return `
+ * @return `true` if the entity flees.
  */
 inline bool calc_scared_flee(PowerTier tier) {
   switch (tier) {
