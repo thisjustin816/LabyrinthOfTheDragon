@@ -59,6 +59,45 @@ static void update_stats(
 }
 
 /**
+ * Set by `fell_monster` when a death knight rises, and read by
+ * `announce_death_knight_rise` once the player's action has finished.
+ */
+static bool death_knight_rose;
+
+/**
+ * Takes a monster to 0 HP. A death knight gets one chance per fight, 3 in 16,
+ * to rise at a quarter of its HP instead. Every druid, fighter, monk, and
+ * sorcerer attack that can kill goes through here, so none of them skips that
+ * roll.
+ * @param monster Monster being struck down.
+ */
+static void fell_monster(Monster *monster) {
+  monster->target_hp = 0;
+  if (
+    monster->type == MONSTER_DEATHKNIGHT &&
+    !(monster->parameter & DEATH_KNIGHT_REVIVE_USED) &&
+    d16() < 3
+  ) {
+    monster->parameter |= DEATH_KNIGHT_REVIVE_USED;
+    monster->target_hp = monster->max_hp / 4;
+    death_knight_rose = true;
+  }
+}
+
+/**
+ * Replaces the action's result line with the death knight's rise, if the action
+ * caused one. It runs after the whole action because area attacks and Wild
+ * Magic skip their own result line, which would hide the rise.
+ */
+static void announce_death_knight_rise(void) {
+  if (!death_knight_rose)
+    return;
+  death_knight_rose = false;
+  sprintf(battle_post_message, str_player_deathknight_revive);
+  skip_post_message = false;
+}
+
+/**
  * Applies damage to the target monster. Takes immunities, etc. into account and
  * handles battle result messages.
  * @param base_damage Base damage for the attack.
@@ -93,30 +132,26 @@ static void damage_monster(uint16_t base_damage, DamageAspect type) {
   if (hasted)
     damage += calc_damage(d16(), base_damage);
 
+  const bool weak = (monster->aspect_vuln & type);
+
+  // A crit ignores resistance but still doubles on a weakness. Without the
+  // doubling, a crit on a weak monster would deal less than a plain hit.
   if (critical) {
+    if (weak)
+      damage <<= 1;
     sprintf(battle_post_message, str_player_hit_crit, damage);
   } else if (monster->aspect_resist & type) {
     damage >>= 1;
     sprintf(battle_post_message, str_player_hit_resist, damage);
-  } else if (monster->aspect_vuln & type) {
+  } else if (weak) {
     damage <<= 1;
     sprintf(battle_post_message, str_player_hit_vuln, damage);
   } else {
     sprintf(battle_post_message, str_player_hit, damage);
   }
 
-  if (monster->target_hp < damage) {
-    monster->target_hp = 0;
-    if (
-      monster->type == MONSTER_DEATHKNIGHT &&
-      !(monster->parameter & DEATH_KNIGHT_REVIVE_USED) &&
-      d16() < 3
-    ) {
-      monster->parameter |= DEATH_KNIGHT_REVIVE_USED;
-      monster->target_hp = monster->max_hp / 4;
-      sprintf(battle_post_message, str_player_deathknight_revive);
-    }
-  }
+  if (monster->target_hp <= damage)
+    fell_monster(monster);
   else
     monster->target_hp -= damage;
 }
@@ -180,8 +215,8 @@ static uint8_t damage_all(
       d = damage << 1;
     }
 
-    if (monster->target_hp < d)
-      monster->target_hp = 0;
+    if (monster->target_hp <= d)
+      fell_monster(monster);
     else
       monster->target_hp -= d;
   }
@@ -230,8 +265,8 @@ static void damage_all_no_miss(uint16_t base_damage, DamageAspect type) {
     else if (monster->aspect_vuln & type)
       d = damage << 1;
 
-    if (monster->target_hp < d)
-      monster->target_hp = 0;
+    if (monster->target_hp <= d)
+      fell_monster(monster);
     else
       monster->target_hp -= d;
   }
@@ -406,7 +441,7 @@ void fighter_cleave(void) {
 
   const uint8_t level = level_offset(player.level, -2);
   const uint16_t base_damage = get_player_damage(level, tier);
-  uint8_t hits = damage_all(base_damage, player.matk, true, DAMAGE_MAGICAL);
+  uint8_t hits = damage_all(base_damage, player.atk, false, DAMAGE_PHYSICAL);
 
   if (hits == 0)
     PLAYER_MISS_ALL;
@@ -540,7 +575,7 @@ void monk_open_palm(void) {
   if (player.level >= 65)
     damage_tier = S_TIER;
   else if (player.level >= 30)
-    damage_tier = B_TIER;
+    damage_tier = A_TIER;
 
   uint8_t trip_chance = 2;
   if (player.level >= 65)
@@ -589,10 +624,10 @@ void monk_flurry(void) {
   }
 
   uint8_t attacks = 2;
-  if (player.level > 80)
-    attacks = 4;
   if (player.level > 60)
     attacks = 3;
+  if (player.level > 80)
+    attacks = 4;
 
   PowerTier damage_tier = B_TIER;
   if (player.level >= 65)
@@ -637,7 +672,7 @@ void monk_quivering_palm(void) {
 
     if (d8() < kill_chance) {
       sprintf(battle_post_message, str_player_monk_quivering_kill);
-      encounter.target->target_hp = 0;
+      fell_monster(encounter.target);
       return;
     }
   }
@@ -766,7 +801,7 @@ void sorcerer_disintegrate(void) {
 
     if (d8() < kill_chance) {
       sprintf(battle_post_message, str_player_sorc_disintegrate_kill);
-      encounter.target->target_hp = 0;
+      fell_monster(encounter.target);
       return;
     }
   }
@@ -1152,8 +1187,10 @@ void player_base_attack(void) BANKED {
     test_class_base_attack();
     break;
   }
+  announce_death_knight_rise();
 }
 
 void player_use_ability(const Ability *ability) BANKED {
   ability->execute();
+  announce_death_knight_rise();
 }

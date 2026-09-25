@@ -105,10 +105,12 @@ bool roll_attack_player(uint8_t atk, uint8_t def) BANKED {
 }
 
 uint16_t calc_damage(uint8_t d16_roll, uint16_t base_dmg) BANKED {
-  uint16_t d = base_dmg;
-  d *= (uint16_t)damage_roll_modifier[d16_roll & 0x0F];
+  // Compute in 32 bits. A high-level monk's Flurry passes a base of up to 4600,
+  // and 4600 times the top modifier of 20 is 92000, too big for a uint16_t.
+  uint32_t d = base_dmg;
+  d *= damage_roll_modifier[d16_roll & 0x0F];
   d /= 16;
-  return d == 0 ? 1 : d;
+  return d == 0 ? 1 : (uint16_t)d;
 }
 
 uint16_t calc_monster_exp(uint8_t mlevel, PowerTier tier) BANKED {
