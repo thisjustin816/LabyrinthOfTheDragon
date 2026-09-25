@@ -226,7 +226,7 @@ typedef struct Player {
    */
   bool has_torch;
   /**
-   * Gauge that represents how long the torch can stay lit.
+   * Steps of fuel left in the torch, 0 when it is out.
    */
   uint8_t torch_gauge;
   /**

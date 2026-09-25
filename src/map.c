@@ -124,11 +124,6 @@ Timer flame_timer;
 uint8_t flame_frame;
 
 /**
- * Timer used to slowly reduce the amount of torch gauge remaining.
- */
-Timer torch_timer;
-
-/**
  * Whether or not the BG priority was set for the destination during a move.
  */
 bool bg_priority_set;
@@ -1148,8 +1143,6 @@ static void init_hud(void) {
   core.load_sprite_palette(tgp, TORCH_GAUGE_PALETTE, 1);
   core.load_sprite_palette(magic_keys_palette, MAGIC_KEY_HUD_PALETTE, 1);
 
-  init_timer(torch_timer, TORCH_GAUGE_SPEED);
-
   set_sprite_tile(TORCH_GAUGE_FLAME, FLAME_TILE_1);
   set_sprite_prop(TORCH_GAUGE_FLAME, TORCH_GAUGE_PROP);
 
@@ -1277,16 +1270,19 @@ void clear_map_sprites(void) {
 }
 
 /**
- * Updates the player's torch / flame.
+ * Burns one unit of torch fuel. Called once per completed step, before the
+ * floor's encounter roll.
+ *
+ * A lit torch keeps random encounters away, so its fuel is counted in steps:
+ * standing still or reading a sign costs nothing. A full torch lasts
+ * TORCH_STEPS steps, and the step that burns the last unit is the first that
+ * can start a fight.
  */
-static void update_torch(void) {
+static void burn_torch(void) {
   if (player.torch_color == FLAME_NONE)
     return;
-
-  if (!update_timer(torch_timer))
+  if (player.torch_gauge == 0)
     return;
-
-  reset_timer(torch_timer);
 
   player.torch_gauge--;
   if (player.torch_gauge == 0) {
@@ -1924,6 +1920,7 @@ static void update_map_move(void) {
 
   map_state = MAP_STATE_WAITING;
   hero_state = HERO_STILL;
+  burn_torch();
 
   // Exit/special tiles go first: they get one specific arrival to fire on,
   // so it can't be lost to a same-step encounter roll, which has other
@@ -2296,7 +2293,7 @@ static bool check_doors(void) {
  * @param color Color of the flame.
  */
 static void light_torch(FlameColor color) {
-  player.torch_gauge = 32;
+  player.torch_gauge = TORCH_STEPS;
   player.torch_color = color;
   const palette_color_t *palette = torch_gauge_palettes + color * 4;
   core.load_sprite_palette(palette, TORCH_GAUGE_PALETTE, 1);
@@ -2478,6 +2475,7 @@ void return_from_death(void) NONBANKED {
   player.sp = player.max_sp;
   player.magic_keys = 0;
   player.got_magic_key = true;
+  player.torch_gauge = 0;
 
   // Same sequence as taking stairs to a new floor (see load_exit): run the
   // floor's on_load now and its on_init on the first frame, so floor 1's
@@ -2604,7 +2602,6 @@ void update_map(void) {
     return;
   }
 
-  update_torch();
   update_hero();
   update_flames();
   update_hud();

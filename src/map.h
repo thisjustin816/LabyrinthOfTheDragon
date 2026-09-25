@@ -126,14 +126,14 @@
 #define SPRITE_TILE_CLEAR 0x74
 
 /**
- * Number of frames before reducing the torch gauge by 1.
- */
-#define TORCH_GAUGE_SPEED 10
-
-/**
  * Palette index for the torch gauge.
  */
 #define TORCH_GAUGE_PALETTE 4
+
+/**
+ * Steps a freshly lit torch burns for. light_torch() fills the gauge to this.
+ */
+#define TORCH_STEPS 32
 
 /**
  * Horizontal position of the magic keys HUD sprites.

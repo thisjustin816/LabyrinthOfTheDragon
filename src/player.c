@@ -1311,6 +1311,8 @@ void init_player(PlayerClass player_class) BANKED {
   }
 
   player.has_torch = false;
+  player.torch_gauge = 0;
+  player.torch_color = FLAME_NONE;
   player.magic_keys = 0;
   player.got_magic_key = false;
   clear_inventory();
