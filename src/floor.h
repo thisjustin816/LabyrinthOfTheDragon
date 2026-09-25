@@ -33,6 +33,12 @@ extern const FloorBank bank_floor8;
 extern const FloorBank bank_floor_test;
 extern const FloorBank bank_floor_test2;
 
+/**
+ * Set when a new game starts, so floor 1 opens with a line of story.
+ * Floor 1's `on_init` clears it, so a death or a load goes straight to play.
+ */
+extern bool new_game_intro;
+
 
 /**
  * Set this as a custom chest handler to have the chest give the player a

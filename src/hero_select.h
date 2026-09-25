@@ -26,8 +26,8 @@ extern uint8_t selected_hero;
 extern char new_hero_name[PLAYER_NAME_LEN];
 
 /**
- * Creates the character for `selected_hero` and enters the world map. Called
- * from the name entry screen.
+ * Creates the character for `selected_hero`, writes its first save and enters
+ * the world map. Called from the name entry screen.
  */
 void start_game(void) NONBANKED;
 

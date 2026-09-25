@@ -9,6 +9,7 @@
 #include "item.h"
 #include "map.h"
 #include "player.h"
+#include "save.h"
 #include "sound.h"
 
 #define MAP_MENU_X 0x00
@@ -208,6 +209,22 @@ static void update_map_menu_stats(void) {
   draw_number_at(player.matk_base, 0x6, 0x18);
   draw_number_at(player.mdef_base, 0x10, 0x18);
   draw_number_at(player.agl_base, 0x10, 0x19);
+
+  // Which floor the player is on, counted down from B1 as the labyrinth goes,
+  // right justified on the XP row against the frame. Only the number is
+  // drawn: the B is baked into the menu tilemap at column 17, the same way
+  // every other label here is art rather than text (ATK:, DEF:, AGL:, and
+  // the L of L99).
+  //
+  // The label is one letter because the row has to hold both. XP runs from
+  // column 4 and reaches 11 characters from level 50 on ("12388/12996", and
+  // 65118/65118 at the cap), which claims through column 14, and columns 15
+  // and 16 stay empty as a separator. floor_table holds eight floors, so the
+  // number is always one digit, and drawing it at width 1 keeps it off the
+  // frame in column 19. map_floor_index() is the floor_table index, so it is
+  // zero based and the displayed number is one more.
+  sprintf(buf, "%u", map_floor_index() + 1);
+  core.draw_text(VRAM_WINDOW_XY(0x12, 0x12), buf, 1);
 }
 
 /**
@@ -573,10 +590,11 @@ void update_map_menu(void) BANKED {
     return;
   }
 
-  if (joypad_pressed & (J_LEFT | J_RIGHT | J_UP | J_DOWN)) {
+  if (was_pressed(J_DPAD)) {
     // A message answers the option it came from, so moving off that option
     // retires it. Left up, it also collides with the hand: the sprite is 16px
-    // tall, so on the bottom row it reaches down into the message line.
+    // tall, so on the bottom row it reaches down into the message line, and
+    // "GAME SAVED!" sat underneath the hand once it moved over to QUIT.
     set_menu_message(NULL);
     move_menu_cursor();
     update_cursor();
@@ -591,6 +609,15 @@ void update_map_menu(void) BANKED {
   case MAP_MENU_CURSOR_RETURN:
     play_sound(sfx_menu_move);
     hide_map_menu();
+    break;
+  case MAP_MENU_CURSOR_SAVE:
+    if (save_write(active_save_slot)) {
+      set_menu_message("GAME SAVED!");
+      play_sound(sfx_big_powerup);
+    } else {
+      set_menu_message("SAVE FAILED");
+      play_sound(sfx_error);
+    }
     break;
   case MAP_MENU_CURSOR_ITEMS:
     // Issue #70: potions, ethers and elixirs can be drunk between fights, so
@@ -610,8 +637,8 @@ void update_map_menu(void) BANKED {
     play_sound(sfx_menu_move);
     break;
   case MAP_MENU_CURSOR_QUIT:
-    // Quitting drops the game in progress, so it asks first. The cursor
-    // stays where it is, which is NO -- the answer that costs nothing.
+    // Quitting drops anything not saved, so it asks first. The cursor stays
+    // where it is, which is NO -- the answer that costs nothing.
     map_menu.state = MAP_MENU_CONFIRM_QUIT;
     draw_quit_prompt();
     play_sound(sfx_menu_move);

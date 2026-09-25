@@ -10,7 +10,9 @@
 #include "hero_select.h"
 #include "name_entry.h"
 #include "player.h"
+#include "main_menu.h"
 #include "map.h"
+#include "save.h"
 #include "sound.h"
 
 #define HERO_OFFSET_X 8 + 33
@@ -195,12 +197,20 @@ void start_game(void) NONBANKED {
   for (uint8_t k = 0; k < 16; k++)
     move_sprite(k, 0, 0);
 
+  save_new_game();
   init_player(selected_hero);
   if (new_hero_name[0]) {
     for (uint8_t k = 0; k < PLAYER_NAME_LEN; k++)
       player.name[k] = new_hero_name[k];
   }
+  play_seconds = 0;
+  new_game_intro = true;
   set_active_floor(&bank_floor1);
+
+  // Commit the new character to its slot straight away so the save select
+  // screen shows the game even if the player never reaches a save point.
+  save_write(active_save_slot);
+
   init_world_map();
 
   game_state = GAME_STATE_WORLD_MAP;
@@ -231,7 +241,12 @@ static void update_hero_select_impl(void) {
     selected_hero = (selected_hero + 1) & 0x03;
     play_sound(sfx_menu_move);
     change_hero();
-  } else if (was_pressed(J_START) || was_pressed(J_A) || was_pressed(J_B)) {
+  } else if (was_pressed(J_B)) {
+    DISPLAY_OFF;
+    hide_sprites();
+    game_state = GAME_STATE_SAVE_SELECT;
+    init_save_select();
+  } else if (was_pressed(J_START) || was_pressed(J_A)) {
     play_sound(sfx_hero_selected);
     init_name_entry();
     game_state = GAME_STATE_NAME_ENTRY;

@@ -1556,6 +1556,15 @@ void draw_battle(void) NONBANKED {
       cleanup_isr();
       battle_state = BATTLE_INACTIVE;
 
+      // What a fight gave the player lasts only that fight: Still Mind's
+      // immunity, Diamond Body's resistances, being prone, and the special
+      // flags. The save stores the player whole, so clear them however the
+      // fight ends, not only when the next one starts.
+      player.debuff_immune = 0;
+      player.aspect_resist = 0;
+      player.trip_turns = 0;
+      reset_special();
+
       if (player_died) {
         player_died = false;
         return_from_death();

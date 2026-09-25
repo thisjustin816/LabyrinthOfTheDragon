@@ -13,7 +13,8 @@
 #include "sound.h"
 
 /**
- * Names are at most six characters: the field the art draws.
+ * Names are at most six characters: the field the art draws, and the width
+ * the save select shows.
  */
 #define NAME_MAX 6
 
@@ -56,7 +57,8 @@ static const palette_color_t backdrop_palettes[] = {
   RGB_SAVE_NAVY, RGB_SAVE_NAVY, RGB_SAVE_NAVY, RGB_SAVE_NAVY,
 };
 
-// 6: the highlighted grid cell (inverted), 7: boxes and text.
+// 6: the highlighted grid cell (inverted), 7: boxes and text, in the save
+// select's selected-slot colors.
 static const palette_color_t text_palettes[] = {
   RGB_SAVE_NAVY, RGB_SAVE_BROWN, RGB_SAVE_ORANGE, RGB_SAVE_GOLD,
   RGB_SAVE_NAVY, RGB_SAVE_GOLD, RGB_SAVE_ORANGE, RGB_SAVE_BROWN,

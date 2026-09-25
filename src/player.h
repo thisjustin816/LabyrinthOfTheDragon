@@ -379,7 +379,7 @@ inline bool is_martial_class(void) {
  * @return `true` if the player has leveled up.
  */
 inline bool has_leveled(void) {
-  return player.next_level_exp >= player.exp;
+  return player.exp >= player.next_level_exp;
 }
 
 /**

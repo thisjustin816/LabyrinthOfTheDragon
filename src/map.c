@@ -11,7 +11,9 @@
 #include "battle.h"
 #include "core.h"
 #include "floor.h"
+#include "main_menu.h"
 #include "map.h"
+#include "save.h"
 #include "sound.h"
 #include "title_screen.h"
 
@@ -205,6 +207,12 @@ FlameColor sconce_colors[8] = {
 static FloorBank *floor_bank;
 
 /**
+ * Set by `map_restore_state`, consumed by the `on_init` trampoline: the floor's
+ * `on_init` resets its script globals, so saved values go in after it runs.
+ */
+static bool pending_save_restore = false;
+
+/**
  * Maps for the current floor.
  */
 static Map maps[MAX_MAPS];
@@ -339,6 +347,14 @@ static bool on_init(void) NONBANKED {
   SWITCH_ROM(floor_bank->bank);
   value = floor_bank->floor->on_init();
   SWITCH_ROM(_prev_bank);
+
+  // Loading a save: the floor has just reset its puzzle counters, so now is
+  // the moment to put the saved ones back.
+  if (pending_save_restore) {
+    pending_save_restore = false;
+    save_apply_deferred();
+  }
+
   return value;
 }
 
@@ -549,7 +565,8 @@ static TileOverrideHashEntry *find_override_entry(
  * reads as free still holds the "no override" values for tile and palette.
  *
  * Colliding coordinates are handled by the probing: floor 8's healing mirrors
- * at (11,21) and (19,9) both hash to slot 2 and repaint only their own tiles.
+ * at (11,21) and (19,9) both hash to slot 2 and repaint only their own tiles,
+ * including across a save and reload.
  *
  * @param map_id Map the tile is on.
  * @param x Column of the tile.
@@ -1337,8 +1354,12 @@ static void leave_world_map(void) {
 
 /**
  * Leaves the world map for the title screen after the pause menu's QUIT was
- * confirmed and the fade out finished. return_to_title_screen() skips the
- * studio card, which has played once.
+ * confirmed and the fade out finished.
+ *
+ * Quitting is leaving the game, so it lands where leaving belongs rather than
+ * one screen short of it on the file picker. The handoff is the one the save
+ * select's own B button already uses to reach the title, and
+ * return_to_title_screen() skips the studio card, which has played once.
  */
 static void quit_to_title(void) {
   leave_world_map();
@@ -2687,4 +2708,136 @@ void draw_world_map(void) NONBANKED {
     return;
   }
   on_draw();
+}
+
+//------------------------------------------------------------------------------
+// Save / Load Support
+//------------------------------------------------------------------------------
+
+/**
+ * Every floor the player can be on, in progression order. A save stores the
+ * *index* into this table rather than `Floor::id`, so that resolving a save
+ * back to a floor never has to page in bank 8 to read the id.
+ *
+ * The `bank_floorN` structs themselves live in ROM0 (`floor.banks.c` is
+ * `#pragma bank 0`), so comparing `floor_bank` against these entries is always
+ * valid regardless of which bank happens to be switched in.
+ *
+ * Floor script globals (puzzle counters and the like) are captured and applied
+ * by `save.c`, which owns the `script_state` layout; the map system only deals
+ * with its own state here.
+ */
+static const FloorBank *const floor_table[] = {
+  &bank_floor1, &bank_floor2, &bank_floor3, &bank_floor4,
+  &bank_floor5, &bank_floor6, &bank_floor7, &bank_floor8,
+};
+
+#define FLOOR_TABLE_LEN ((uint8_t)(sizeof(floor_table) / sizeof(floor_table[0])))
+
+uint8_t map_floor_index(void) BANKED {
+  for (uint8_t k = 0; k < FLOOR_TABLE_LEN; k++) {
+    if (floor_bank == floor_table[k])
+      return k;
+  }
+  // A test floor, or a floor missing from the table. Fall back to floor 1 so a
+  // save is still loadable rather than dropping the player nowhere.
+  return 0;
+}
+
+void map_capture_state(SaveGame *s) BANKED {
+  s->floor_index = map_floor_index();
+  s->map_id = active_map->id;
+  s->map_x = map_x;
+  s->map_y = map_y;
+  s->hero_direction = (uint8_t)hero_direction;
+
+  s->flags_chest_open = flags_chest_open;
+  s->flags_chest_locked = flags_chest_locked;
+  s->flags_lever_on = flags_lever_on;
+  s->flags_lever_stuck = flags_lever_stuck;
+  s->flags_door_locked = flags_door_locked;
+  s->flags_sconce_lit = flags_sconce_lit;
+  s->npc_visible = npc_visible;
+
+  for (uint8_t k = 0; k < 8; k++)
+    s->sconce_colors[k] = (uint8_t)sconce_colors[k];
+
+  for (uint8_t k = 0; k < TILE_HASHTABLE_SIZE; k++)
+    s->overrides[k] = tile_override_hashtable[k];
+}
+
+/**
+ * Bank 2 half of `map_restore_state`.
+ */
+static void restore_state(const SaveGame *s) {
+  uint8_t index = s->floor_index;
+  if (index >= FLOOR_TABLE_LEN)
+    index = 0;
+
+  // Loads floor data and resets every object flag to its ROM default, then
+  // runs the floor's `on_load`. The saved flags are applied over the top.
+  set_active_floor((FloorBank *)floor_table[index]);
+
+  uint8_t map_id = s->map_id;
+  if (map_id >= MAX_MAPS)
+    map_id = 0;
+  active_map = maps + map_id;
+  hero_direction = (Direction)s->hero_direction;
+  map_x = s->map_x;
+  map_y = s->map_y;
+
+  flags_chest_open = s->flags_chest_open;
+  flags_chest_locked = s->flags_chest_locked;
+  flags_lever_on = s->flags_lever_on;
+  flags_lever_stuck = s->flags_lever_stuck;
+  flags_door_locked = s->flags_door_locked;
+  flags_sconce_lit = s->flags_sconce_lit;
+  npc_visible = s->npc_visible;
+
+  for (uint8_t k = 0; k < 8; k++)
+    sconce_colors[k] = (FlameColor)s->sconce_colors[k];
+
+  // `refresh_map_screen` already resolves each door's open/closed tile from
+  // `flags_door_locked` (see the HASH_TYPE_DOOR case in `get_map_tile`), so
+  // this is belt and braces: it makes `update_door_graphics` repaint the doors
+  // in view on the first frame as well. Graphics only, no floor scripts run.
+  doors_updated = 0xFFFF;
+
+  // `sconces_updated` is deliberately NOT set: `check_sconce_changed` runs the
+  // sconce `on_lit` callbacks, which are scripts (opening doors, spawning
+  // encounters). Replaying those on load would re-fire events the player has
+  // already seen. The flames themselves get rebuilt by `init_flames()`, which
+  // `init_world_map()` calls after this, reading the state restored above.
+  sconces_updated = 0;
+
+  refresh_local_tiles = true;
+
+  // Script counters and tile overrides are applied in a second phase, once the
+  // floor's on_init has done its own resets. See the on_init trampoline.
+  pending_save_restore = true;
+}
+
+void map_apply_deferred_state(const SaveGame *s) BANKED {
+  for (uint8_t k = 0; k < TILE_HASHTABLE_SIZE; k++)
+    tile_override_hashtable[k] = s->overrides[k];
+
+  // The screen was drawn before this ran; repaint every overridden tile that
+  // is in view. redraw_tile ignores anything off-map or off-screen.
+  const TileOverrideHashEntry *e = tile_override_hashtable;
+  for (uint8_t k = 0; k < TILE_HASHTABLE_SIZE; k++, e++) {
+    if (e->map_id != 0xFF)
+      redraw_tile(e->map_id, e->x, e->y);
+  }
+
+  refresh_local_tiles = true;
+}
+
+void map_restore_state(const SaveGame *s) NONBANKED {
+  // Save and restore the caller's bank rather than leaving bank 2 paged in.
+  // `save.c` does not live on bank 2, so returning with bank 2 selected would
+  // drop the caller's own code out from under it.
+  const uint8_t _prev_bank = CURRENT_BANK;
+  SWITCH_ROM(MAP_SYSTEM_BANK);
+  restore_state(s);
+  SWITCH_ROM(_prev_bank);
 }

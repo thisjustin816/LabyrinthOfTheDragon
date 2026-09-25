@@ -19,6 +19,7 @@ LCCFLAGS = -Wm-yC -Wm-yt$(CART_TYPE) -Wl-yo$(ROM_BANKS) -Wl-ya$(RAM_BANKS)
 PNG2BIN := ./tools/png2bin
 TABLES2C := ./tools/tables2c
 STRINGS2C := ./tools/strings2c
+VERSION2H := ./tools/version2h
 
 # GBDK_DEBUG = ON
 ifdef GBDK_DEBUG
@@ -56,7 +57,7 @@ all: assets
 
 rom: data $(BIN)
 
-assets: asset_dirs strings tables $(TILEBIN)
+assets: asset_dirs strings tables version $(TILEBIN)
 
 asset_dirs:
 	mkdir -p res/tiles
@@ -66,6 +67,9 @@ tables: assets/tables.csv
 
 strings: assets/strings.js
 	$(STRINGS2C)
+
+version:
+	$(VERSION2H) $(VERSION) $(if $(RELEASE),--release)
 
 res/tiles/%.bin: assets/tiles/%.png
 	$(PNG2BIN) $< $@
@@ -96,3 +100,4 @@ clean:
 	rm -f obj/*
 	rm -f src/strings.h
 	rm -f src/tables.c
+	rm -f src/version.h

@@ -10,6 +10,7 @@
 #include "battle.effects.h"
 #include "encounter.h"
 #include "player.h"
+#include "save.h"
 #include "monster.h"
 #include "tables.h"
 #include "sound.h"
@@ -1277,6 +1278,11 @@ void set_player_abilities(void) {
 
 void grant_ability(AbilityFlag flag) BANKED {
   player.ability_flags |= flag;
+  set_player_abilities();
+}
+
+void player_refresh_abilities(void) BANKED {
+  set_class_abilities();
   set_player_abilities();
 }
 

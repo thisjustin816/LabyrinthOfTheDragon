@@ -48,7 +48,6 @@ static void kobold_take_turn(Monster *m) {
 
   if (roll_attack_monster(atk, def)) {
     uint16_t base_damage = get_monster_dmg(m->level, m->exp_tier);
-    clear_debug();
     damage_player(base_damage, type);
   } else if (d16() >= prone_chance[m->exp_tier]) {
     sprintf(battle_post_message, str_monster_kobold_miss);

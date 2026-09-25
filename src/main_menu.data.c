@@ -6,55 +6,78 @@
 #include "main_menu.h"
 
 /**
- * The main menu uses most of the 8 available palettes for specific graphics
- * elements on both the title screen, save select, and new game screens.
- *
- * - Palettes 0-3: These four palettes are used for core "background" colors
- *   for the title screen art, etc.
- * - Palettes 4-6: Save game select palettes. The colors for each of these are
- *   changed to denote that a particular save game is selected.
+ * Save select background palettes. Font tiles draw their glyph in color 3 over
+ * a color 1 backing, so "invisible backing" palettes repeat the backdrop in
+ * colors 0-2. Palettes 4-6 (the slot boxes) are loaded separately from the
+ * save_*_selected_palettes tables below.
  */
-const uint16_t main_menu_palettes[] = {
-  // 0 - Background 1 "Textbox Text"
-  RGB_BG_BLUE,
-  RGB_SELECTED_BOX_BODY,
-  RGB_SELECTED_BOX_BORDER,
-  RGB_SELECTED_BOX_OUTLINE,
-  // 1 - Background 2 "Free Text"
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  RGB_SELECTED_BOX_OUTLINE,
-  // 2 - Background 3 (UNUSED)
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  // 3 - Background 4 (UNUSED)
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  // 4 - Save Select 1
-  RGB_BG_BLUE,
-  RGB_GRAY_LIGHT,
+const uint16_t save_select_bg_palettes[] = {
+  // 0 - Backdrop and header text (white on navy)
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+  RGB_WHITE,
+  // 1 - ERASE label. The deselected slot colors, so the button's face is the
+  // same gray as its frame: the frame's vertical tiles are only part-width and
+  // render their remainder in the frame palette, so a different face color
+  // shows up as a band inset behind the word.
+  PALETTE_SAVE_DESELECTED,
+  // 2 - The erase prompt's YES box. Navy, so the box can't show, until the
+  // prompt loads its colors.
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+  // 3 - ERASE button frame. Overwritten by draw_action_label before the first
+  // frame is shown; this entry only keeps the screen from flashing the title
+  // screen's leftover palette if that order ever changes.
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+};
+
+const uint16_t save_select_erase_palette[] = {
+  RGB_SAVE_NAVY,
+  RGB_SAVE_ERASE_RED,
+  RGB_GRAY_MID,
+  RGB_WHITE,
+};
+
+// Palette 3 draws the ERASE box's frame. It cannot share the label's palette:
+// the border tile's outline and the label's text ink are both color 3, and the
+// label needs that white to stay readable on its dark fill, which is what
+// turned the frame white. These are the slot boxes' own colors, so the frame
+// matches theirs, and it swaps to the selected set on focus the way they do.
+const uint16_t save_select_box_palette[] = {
+  PALETTE_SAVE_DESELECTED,
+};
+
+const uint16_t save_select_box_focus_palette[] = {
+  PALETTE_SAVE_SELECTED,
+};
+
+// Armed: the frame turns red with the face so the whole button reads as one
+// shape rather than a red band in a gray box.
+const uint16_t save_select_box_erase_palette[] = {
+  RGB_WHITE,
+  RGB_SAVE_ERASE_RED,
   RGB_GRAY_MID,
   RGB_GRAY_DARK,
-  // 5 - Save Select 2
-  RGB_BG_BLUE,
-  RGB_GRAY_LIGHT,
-  RGB_GRAY_MID,
-  RGB_GRAY_DARK,
-  // 6 - Save Select 3
-  RGB_BG_BLUE,
-  RGB_GRAY_LIGHT,
-  RGB_GRAY_MID,
-  RGB_GRAY_DARK,
-  // 8 - UNUSED
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
-  RGB_BG_BLUE,
+};
+
+const uint16_t save_select_focus_palette[] = {
+  RGB_SAVE_NAVY,
+  RGB_SAVE_GOLD,
+  RGB_SAVE_ORANGE,
+  RGB_SAVE_BROWN,
+};
+
+const uint16_t save_select_version_palette[] = {
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+  RGB_SAVE_NAVY,
+  RGB_SAVE_HINT,
 };
 
 const uint16_t save_1_selected_palettes[] = {

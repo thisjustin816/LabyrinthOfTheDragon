@@ -92,7 +92,6 @@ inline bool has_beaten(MiniBoss b) {
 
 inline void set_beaten(MiniBoss b) {
   mini_bosses_defeated |= b;
-  *(debug + 0x20) = mini_bosses_defeated;
 }
 
 inline bool all_bosses_beaten(void) {

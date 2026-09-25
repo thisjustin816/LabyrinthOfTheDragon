@@ -5,6 +5,7 @@ data/strings_*.c
 src/strings.h
 res/tiles/*
 src/tables.c
+src/version.h
 .vscode/settings.json
 
 # Ignore all build files

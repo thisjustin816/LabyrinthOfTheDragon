@@ -7,6 +7,7 @@
 #include "credits.h"
 #include "core.h"
 #include "hero_select.h"
+#include "main_menu.h"
 #include "map.h"
 #include "name_entry.h"
 #include "sound.h"
@@ -15,6 +16,13 @@
 #include "title_screen.h"
 
 GameState game_state = GAME_STATE_TITLE;
+uint16_t play_seconds;
+
+/**
+ * VBlank counter used to drive `play_seconds`.
+ */
+static uint8_t play_frames;
+
 uint8_t joypad_down;
 uint8_t joypad_pressed;
 uint8_t joypad_released;
@@ -50,8 +58,6 @@ uint8_t joypad_released;
  * Initializes the core game engine.
  */
 static inline void initialize(void) {
-  ENABLE_RAM;
-
   initarand(RANDOM_SEED);
   hide_window();
 
@@ -79,6 +85,9 @@ static inline void game_loop(void) {
   switch (game_state) {
   case GAME_STATE_TITLE:
     update_title_screen();
+    break;
+  case GAME_STATE_SAVE_SELECT:
+    update_save_select();
     break;
   case GAME_STATE_HERO_SELECT:
     update_hero_select();
@@ -161,6 +170,14 @@ void main(void) {
 
     game_loop();
     vsync();
+
+    // ~59.7 VBlanks per second on a CGB; close enough for a play clock.
+    if (++play_frames >= 60) {
+      play_frames = 0;
+      if (play_seconds < 0xFFFF)
+        play_seconds++;
+    }
+
     render();
   }
 }

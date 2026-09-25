@@ -221,6 +221,7 @@ addNamespace('floor1', 2, {
   'sign_hidden_passage_hint': 'Check behind you...',
   'sign_missing_elite': 'A powerful foe once lived here.',
   'boss_defeated': "Yawp! You won't beat my friends below!",
+  'intro': 'The tunnel has collapsed behind you! No way back; only down.',
 });
 
 addNamespace('floor2', 2, {

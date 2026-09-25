@@ -18,6 +18,7 @@ bool special_encounter = true;
 // unused sign in floor 2's original layout tried to. Reset on_load so a
 // death-and-replay warns again.
 bool warned_no_return = false;
+bool new_game_intro = false;
 
 //------------------------------------------------------------------------------
 // Maps
@@ -317,6 +318,11 @@ static const EncounterTable encounter_lv9[] = {
 
 static bool on_init(void) {
   config_random_encounter(7, 1, 1, true);
+  if (new_game_intro) {
+    new_game_intro = false;
+    map_textbox(str_floor1_intro);
+    return true;
+  }
   return false;
 }
 

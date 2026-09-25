@@ -6,6 +6,7 @@
 
 #include "core.h"
 #include "hero_select.h"
+#include "main_menu.h"
 #include "sound.h"
 #include "title_screen.h"
 
@@ -499,8 +500,8 @@ void update_main_title(void) NONBANKED {
     if (was_pressed(J_START)) {
       DISPLAY_OFF;
       clear_sprites();
-      game_state = GAME_STATE_HERO_SELECT;
-      init_hero_select();
+      game_state = GAME_STATE_SAVE_SELECT;
+      init_save_select();
       return;
     }
 
