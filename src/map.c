@@ -190,9 +190,11 @@ static Timer battle_wait_timer;
 bool init_random = true;
 
 /**
- * Current random initialization seed.
+ * A running count of frames since power-on, taken on the screens before play
+ * (when main.c's RANDOM_SEED is 0) and on each map until its first move,
+ * which seeds the dice.
  */
-static uint16_t new_seed = 1;
+uint16_t new_seed = 1;
 
 /**
  * Holds the color of the flames for the sconces in the current floor.

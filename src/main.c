@@ -49,10 +49,12 @@ uint8_t joypad_released;
 // #define SFX_TEST
 
 /**
- * Random Seed to use for the game. If set to 0 then the game will generate a
- * seed value on the title while waiting for the player to begin the game.
+ * Random seed for the game. At 0, every frame on the title, file, hero, and
+ * name screens adds to the running count (map.c's new_seed) that seeds the
+ * dice on a map's first move. Any other value seeds the dice with it at
+ * power-on and leaves those screens out of the count.
  */
-#define RANDOM_SEED 50
+#define RANDOM_SEED 0
 
 /**
  * Initializes the core game engine.
@@ -105,6 +107,23 @@ static inline void game_loop(void) {
     update_name_entry();
     break;
   }
+}
+
+/**
+ * Counts a frame on the screens before play toward the map's seed, when
+ * RANDOM_SEED is 0.
+ */
+static inline void count_seed_frame(void) {
+#if RANDOM_SEED == 0
+  switch (game_state) {
+  case GAME_STATE_TITLE:
+  case GAME_STATE_SAVE_SELECT:
+  case GAME_STATE_HERO_SELECT:
+  case GAME_STATE_NAME_ENTRY:
+    new_seed++;
+    break;
+  }
+#endif
 }
 
 /**
@@ -168,6 +187,7 @@ void main(void) {
       play_sound(sfx_test);
     #endif
 
+    count_seed_frame();
     game_loop();
     vsync();
 

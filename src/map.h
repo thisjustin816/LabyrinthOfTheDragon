@@ -1088,6 +1088,12 @@ extern MapTile local_tiles[5];
 extern bool init_random;
 
 /**
+ * A running count of frames since power-on, taken on the screens before play
+ * and on each map until its first move, which seeds the dice.
+ */
+extern uint16_t new_seed;
+
+/**
  * Top-level state for the map system.
  */
 extern MapState map_state;
