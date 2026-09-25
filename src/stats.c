@@ -3,56 +3,81 @@
 #include "stats.h"
 #include "player.h"
 
+/**
+ * Clamps a level to the 1..MAX_PLAYER_LEVEL range the stat tables cover.
+ *
+ * Every accessor below indexes `[level - 1]`, so a level of 0 reads the entry
+ * before its row. That is how issue #78 produced a kobold hitting for 3031: a
+ * MONSTER_LAYOUT_2 encounter entry that only declared one monster left the
+ * second monster zeroed, and MonsterType 0 is MONSTER_KOBOLD at level 0. PR #79
+ * fixes that particular entry, but clamping here means a malformed entry can
+ * never again read outside the tables.
+ */
+static uint8_t clamp_level(uint8_t level) {
+  if (level < 1)
+    return 1;
+  if (level > MAX_PLAYER_LEVEL)
+    return MAX_PLAYER_LEVEL;
+  return level;
+}
+
+/**
+ * Masks a tier down to the 4 rows the stat tables have.
+ */
+static uint8_t clamp_tier(PowerTier tier) {
+  return ((uint8_t)tier) & 0x03;
+}
+
 uint16_t get_exp(uint8_t level) BANKED {
-  return exp_by_level[level - 1];
+  return exp_by_level[clamp_level(level) - 1];
 }
 
 uint16_t get_monster_exp(uint8_t level, PowerTier tier) BANKED {
-  return monster_exp[tier][level - 1];
+  return monster_exp[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint8_t get_agl(uint8_t level, PowerTier tier) BANKED {
-  return agl[tier][level - 1];
+  return agl[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint16_t get_player_hp(uint8_t level, PowerTier tier) BANKED {
-  return player_hp[tier][level - 1];
+  return player_hp[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint8_t get_player_sp(uint8_t level, PowerTier tier) BANKED {
-  return player_sp[tier][level - 1];
+  return player_sp[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint8_t get_player_def(uint8_t level, PowerTier tier) BANKED {
-  return player_def[tier][level - 1];
+  return player_def[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint8_t get_player_atk(uint8_t level, PowerTier tier) BANKED {
-  return player_atk[tier][level - 1];
+  return player_atk[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint16_t get_player_damage(uint8_t level, PowerTier tier) BANKED {
-  return player_dmg[tier][level - 1];
+  return player_dmg[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint16_t get_monster_hp(uint8_t level, PowerTier tier) BANKED {
-  return monster_hp[tier][level - 1];
+  return monster_hp[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint8_t get_monster_def(uint8_t level, PowerTier tier) BANKED {
-  return monster_def[tier][level - 1];
+  return monster_def[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint8_t get_monster_atk(uint8_t level, PowerTier tier) BANKED {
-  return monster_atk[tier][level - 1];
+  return monster_atk[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint16_t get_monster_dmg(uint8_t level, PowerTier tier) BANKED {
-  return monster_dmg[tier][level - 1];
+  return monster_dmg[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 uint16_t get_player_heal(uint8_t level, PowerTier tier) BANKED {
-  return player_heal[tier][level - 1];
+  return player_heal[clamp_tier(tier)][clamp_level(level) - 1];
 }
 
 bool check_attack(
@@ -61,7 +86,9 @@ bool check_attack(
   uint8_t atk,
   uint8_t def
  ) BANKED {
-  int8_t delta = atk - def;
+  // Compute in 16 bits: a buffed ATK against a weak DEF can differ by more
+  // than 127, which an int8_t would flip negative.
+  int16_t delta = (int16_t)atk - (int16_t)def;
   if (delta <= -32)
     return d256_roll < table[0];
   if (delta >= 32)

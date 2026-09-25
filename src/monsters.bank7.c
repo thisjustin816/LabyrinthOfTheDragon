@@ -27,7 +27,7 @@ static void mindflayer_take_turn(Monster *monster) {
     sprintf(battle_pre_message,
       str_monster2_mindflayer_mind_blast, monster->id);
 
-    if (player.debuff_immune & DEBUFF_CONFUSED) {
+    if (player.debuff_immune & FLAG_DEBUFF_CONFUSED) {
       monster->parameter |= MIND_FLAYER_MIND_BLAST;
       sprintf(battle_post_message, str_monster2_mindflayer_mind_blast_miss);
       SFX_MISS;

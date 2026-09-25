@@ -1533,7 +1533,7 @@ void draw_battle(void) NONBANKED {
       if (player_died) {
         player_died = false;
         return_from_death();
-      } else if (encounter.is_final_boss) {
+      } else if (encounter.is_final_boss && encounter.victory) {
         init_credits();
       } else {
         return_from_battle();

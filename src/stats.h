@@ -155,20 +155,6 @@ inline bool is_debuff(StatusEffect effect) {
 }
 
 /**
- * Denotes a status effect immunity for the player or a monster.
- */
-typedef enum StatusEffectImmunity {
-  IMMUNE_BLIND = FLAG(0),
-  IMMUNE_SCARED = FLAG(1),
-  IMMUNE_PARALYZED = FLAG(2),
-  IMMUNE_POISON = FLAG(3),
-  IMMUNE_CONFUSED = FLAG(4),
-  IMMUNE_AGL_DOWN = FLAG(5),
-  IMMUNE_ATK_DOWN = FLAG(6),
-  IMMUNE_DEF_DOWN = FLAG(7),
-} StatusEffectImmunity;
-
-/**
  * Denotes a possible result when attempting to apply a status effect.
  */
 typedef enum StatusEffectResult {
@@ -475,6 +461,17 @@ inline uint8_t level_offset(int8_t level, int8_t offset) {
 }
 
 /**
+ * Lowers a stat without going below 0. Stats need this rather than
+ * `level_offset`, which caps at 99 and reads anything past 127 as negative.
+ * @param stat The stat to lower.
+ * @param amount How much to take off.
+ * @return The lowered stat.
+ */
+inline uint8_t stat_minus(uint8_t stat, uint8_t amount) {
+  return stat > amount ? stat - amount : 0;
+}
+
+/**
  * @return `true` if the damage / healing roll is critical.
  * @param d16_roll Result of a d16 roll.
  */
@@ -488,15 +485,6 @@ inline bool is_critical(uint8_t d16_roll) {
  */
 inline bool is_fumble(uint8_t d16_roll) {
   return d16_roll <= 1;
-}
-
-/**
- * @return `true` If immune to the given effect.
- * @param immune Immunity bitfield.
- * @param effect Status effect to check.
- */
-inline bool is_debuff_immmune(uint8_t immune, StatusEffect effect) {
-  return immune & FLAG(effect);
 }
 
 /**

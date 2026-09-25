@@ -447,11 +447,24 @@ void fighter_menace(void) {
     tier = S_TIER;
   }
 
+  // A roar that lands on nothing but immune targets should say so, the same
+  // way a physically-immune hit does, instead of always reading as a scare
+  // that worked.
+  bool landed = false, immune = false;
   Monster *monster = encounter.monsters;
   for (uint8_t k = 0; k < 3; k++, monster++) {
     if (!monster->active)
       continue;
-    apply_scared(monster->status_effects, tier, turns, monster->debuff_immune);
+    StatusEffectResult result = apply_scared(
+      monster->status_effects, tier, turns, monster->debuff_immune);
+    landed |= (result == STATUS_RESULT_SUCCESS);
+    immune |= (result == STATUS_RESULT_IMMUNE);
+  }
+
+  if (!landed && immune) {
+    sprintf(battle_post_message, str_player_hit_immune);
+    skip_post_message = false;
+    SFX_FAIL;
   }
 }
 
@@ -556,6 +569,12 @@ void monk_still_mind(void) {
     if (is_debuff(effect->effect))
       effect->active = false;
   }
+  // player.debuffs mirrors this list but is otherwise only rebuilt at the
+  // start of the player's own turn; left stale, a monster acting before then
+  // still reads a debuff this just cleared (floor 8's mind flayer: Extract Brain
+  // off a confusion Still Mind already cured).
+  player.debuffs = 0;
+
   sprintf(battle_pre_message, str_player_monk_still_mind);
   sprintf(battle_post_message, str_player_monk_still_mind_post);
 }
@@ -668,14 +687,26 @@ void sorcerer_darkness(void) {
   if (player.level >= 45)
     tier = A_TIER;
 
+  // As with fighter_menace: say so when every target shrugged it off immune,
+  // rather than always reading as a blind that landed.
+  bool landed = false, immune = false;
   Monster *monster = encounter.monsters;
   for (uint8_t k = 0; k < 3; k++, monster++) {
     if (!monster->active)
       continue;
-    apply_blind(monster->status_effects, tier, turns, monster->debuff_immune);
+    StatusEffectResult result = apply_blind(
+      monster->status_effects, tier, turns, monster->debuff_immune);
+    landed |= (result == STATUS_RESULT_SUCCESS);
+    immune |= (result == STATUS_RESULT_IMMUNE);
   }
 
-  SFX_MAGIC;
+  if (!landed && immune) {
+    sprintf(battle_post_message, str_player_hit_immune);
+    skip_post_message = false;
+    SFX_FAIL;
+  } else {
+    SFX_MAGIC;
+  }
 }
 
 void sorcerer_fireball(void) {
@@ -1029,10 +1060,19 @@ const char *get_grant_message(AbilityFlag flag) BANKED {
   }
 }
 
+/**
+ * @return EXP needed for the level after `level`, or 0xFFFF at the cap.
+ */
+static uint16_t exp_for_next_level(uint8_t level) {
+  return level < MAX_PLAYER_LEVEL ? get_exp(level + 1) : 0xFFFF;
+}
+
 void set_player_level(uint8_t level) BANKED {
+  if (level > MAX_PLAYER_LEVEL)
+    level = MAX_PLAYER_LEVEL;
   player.level = level;
   player.exp = get_exp(player.level);
-  player.next_level_exp = get_exp(player.level + 1);
+  player.next_level_exp = exp_for_next_level(player.level);
   update_player_stats();
   full_heal_player();
 }
@@ -1074,12 +1114,16 @@ void init_player(PlayerClass player_class) BANKED {
 
 bool level_up(uint16_t xp) BANKED {
   bool level_up = false;
-  player.exp += xp;
 
-  while (player.exp >= player.next_level_exp) {
+  // Saturate rather than wrap: level 99 needs 65118 EXP.
+  player.exp = (player.exp > 0xFFFF - xp) ? 0xFFFF : player.exp + xp;
+
+  // Stop at the cap. get_exp() clamps its argument, so the requirement stops
+  // rising at level 99, and without this check the loop would never end.
+  while (player.level < MAX_PLAYER_LEVEL && player.exp >= player.next_level_exp) {
     level_up = true;
     player.level++;
-    player.next_level_exp = get_exp(player.level + 1);
+    player.next_level_exp = exp_for_next_level(player.level);
   }
 
   if (level_up) {

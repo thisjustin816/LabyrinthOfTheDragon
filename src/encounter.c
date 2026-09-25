@@ -102,6 +102,7 @@ void reset_player_stats(void) NONBANKED {
   player.def = player.def_base;
   player.matk = player.matk_base;
   player.mdef = player.mdef_base;
+  player.agl = player.agl_base;
   player.hp = player.hp;
   encounter.player_fled = false;
   encounter.player_died = false;
@@ -119,49 +120,72 @@ void monster_reset_stats(Monster *m) NONBANKED {
 }
 
 
-/**
- * Updates status effects for the player.
- */
-static void update_player_status_effects(void) {
+void refresh_player_stats(void) BANKED {
+  reset_player_stats();
   player.buffs = 0;
   player.debuffs = 0;
 
   StatusEffectInstance *effect = encounter.player_status_effects;
   for (uint8_t k = 0; k < MAX_ACTIVE_EFFECTS; k++, effect++) {
-    update_effect_duration(effect);
     if (!effect->active)
       continue;
 
-    if (effect->effect < 8)
+    if (is_debuff(effect->effect))
       player.debuffs |= effect->flag;
     else
       player.buffs |= effect->flag;
+  }
 
-    switch (k) {
-    case DEBUFF_BLIND:
-      player.atk = 0;
-      break;
-    case DEBUFF_AGL_DOWN:
-      player.agl = agl_down(player.agl_base, effect->tier);
-      break;
-    case DEBUFF_ATK_DOWN:
-      player.atk = atk_down(player.atk_base, effect->tier);
-      break;
-    case DEBUFF_DEF_DOWN:
-      player.def = def_down(player.def_base, effect->tier);
-      break;
-    case BUFF_HASTE:
-    case BUFF_AGL_UP:
-      player.agl = agl_up(player.agl_base, effect->tier);
-      break;
-    case BUFF_ATK_UP:
-      player.atk = atk_up(player.atk_base, effect->tier);
-      break;
-    case BUFF_DEF_UP:
-      player.def = def_up(player.def_base, effect->tier);
-      break;
+  // Buffs first, then debuffs. Every case below assigns from the matching
+  // `_base` stat rather than adjusting a running value, so whichever slot is
+  // applied last wins the stat outright. Ordering the passes means a debuff
+  // always beats a buff on the same stat.
+  for (uint8_t pass = 0; pass < 2; pass++) {
+    const bool debuff_pass = pass == 1;
+
+    effect = encounter.player_status_effects;
+    for (uint8_t k = 0; k < MAX_ACTIVE_EFFECTS; k++, effect++) {
+      if (!effect->active || is_debuff(effect->effect) != debuff_pass)
+        continue;
+
+      switch (effect->effect) {
+      case DEBUFF_AGL_DOWN:
+        player.agl = agl_down(player.agl_base, effect->tier);
+        break;
+      case DEBUFF_ATK_DOWN:
+        player.atk = atk_down(player.atk_base, effect->tier);
+        break;
+      case DEBUFF_DEF_DOWN:
+        player.def = def_down(player.def_base, effect->tier);
+        break;
+      case BUFF_HASTE:
+      case BUFF_AGL_UP:
+        player.agl = agl_up(player.agl_base, effect->tier);
+        break;
+      case BUFF_ATK_UP:
+        player.atk = atk_up(player.atk_base, effect->tier);
+        break;
+      case BUFF_DEF_UP:
+        player.def = def_up(player.def_base, effect->tier);
+        break;
+      }
     }
   }
+
+  // Blindness comes after both passes: an ATK Down in a later slot sets ATK
+  // from its base and would give a blind hero their aim back.
+  if (player.debuffs & FLAG_DEBUFF_BLIND)
+    player.atk = 0;
+}
+
+/**
+ * Counts down the player's status effects, then updates their stats.
+ */
+static void update_player_status_effects(void) {
+  StatusEffectInstance *effect = encounter.player_status_effects;
+  for (uint8_t k = 0; k < MAX_ACTIVE_EFFECTS; k++, effect++)
+    update_effect_duration(effect);
+  refresh_player_stats();
 }
 
 /**
@@ -179,41 +203,52 @@ static void update_monster_status_effects(Monster *monster) {
     if (!effect->active)
       continue;
 
-    if (effect->effect < 8)
+    if (is_debuff(effect->effect))
       monster->debuffs |= effect->flag;
     else
       monster->buffs |= effect->flag;
+  }
 
-    switch (effect->effect) {
-    case DEBUFF_BLIND:
-      monster->atk = 0;
-      break;
-    case DEBUFF_AGL_DOWN:
-      monster->agl = agl_down(monster->agl_base, effect->tier);
-      break;
-    case DEBUFF_ATK_DOWN:
-      monster->atk = atk_down(monster->atk_base, effect->tier);
-      break;
-    case DEBUFF_DEF_DOWN:
-      monster->def = def_down(monster->def_base, effect->tier);
-      break;
-    case BUFF_AGL_UP:
-      monster->agl = agl_up(monster->agl_base, effect->tier);
-      break;
-    case BUFF_ATK_UP:
-      monster->atk = atk_up(monster->atk_base, effect->tier);
-      break;
-    case BUFF_DEF_UP:
-      monster->def = def_up(monster->def_base, effect->tier);
-      break;
+  // Buffs first, then debuffs, for the reason given in the player's copy.
+  for (uint8_t pass = 0; pass < 2; pass++) {
+    const bool debuff_pass = pass == 1;
+
+    effect = monster->status_effects;
+    for (uint8_t k = 0; k < MAX_ACTIVE_EFFECTS; k++, effect++) {
+      if (!effect->active || is_debuff(effect->effect) != debuff_pass)
+        continue;
+
+      switch (effect->effect) {
+      case DEBUFF_AGL_DOWN:
+        monster->agl = agl_down(monster->agl_base, effect->tier);
+        break;
+      case DEBUFF_ATK_DOWN:
+        monster->atk = atk_down(monster->atk_base, effect->tier);
+        break;
+      case DEBUFF_DEF_DOWN:
+        monster->def = def_down(monster->def_base, effect->tier);
+        break;
+      case BUFF_AGL_UP:
+        monster->agl = agl_up(monster->agl_base, effect->tier);
+        break;
+      case BUFF_ATK_UP:
+        monster->atk = atk_up(monster->atk_base, effect->tier);
+        break;
+      case BUFF_DEF_UP:
+        monster->def = def_up(monster->def_base, effect->tier);
+        break;
+      }
     }
   }
+
+  // Blindness last, for the reason given in the player's copy.
+  if (monster->debuffs & FLAG_DEBUFF_BLIND)
+    monster->atk = 0;
 }
 
 void check_status_effects(void) {
   switch (encounter.turn) {
   case TURN_PLAYER:
-    reset_player_stats();
     update_player_status_effects();
     break;
   case TURN_MONSTER1:
@@ -248,7 +283,6 @@ inline void player_turn(void) {
 
     switch (effect->effect) {
     case DEBUFF_SCARED:
-      const uint8_t scared_roll = d256();
       if (fear_flee_roll(effect->tier))
         fleeing = true;
       else if (fear_shiver_roll(effect->tier))
@@ -419,7 +453,6 @@ inline void monster_turn(void) {
       continue;
     switch (effect->effect) {
     case DEBUFF_SCARED:
-      const uint8_t scared_roll = d256();
       if (fear_flee_roll(effect->tier)) {
         monster_flee(monster);
         return;
@@ -682,7 +715,10 @@ StatusEffectInstance *get_effect_slot(
 
   e = list;
   for (uint8_t k = 0; k < MAX_ACTIVE_EFFECTS; k++, e++) {
-    if (e->active && e->effect != effect)
+    // Only an *active* instance of the same effect matters here. Expired slots
+    // keep the tier they lapsed at, so testing them would let a spent
+    // high-tier effect veto every weaker one for the rest of the battle.
+    if (!e->active || e->effect != effect)
       continue;
 
     // if there is a more powerful version: do nothing

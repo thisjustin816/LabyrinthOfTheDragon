@@ -80,6 +80,11 @@ static inline void use_remedy(void) {
     if (is_debuff(effect->effect))
       effect->active = false;
   }
+  // The stats and flags are otherwise only rebuilt at the start of the
+  // player's own turn; left stale, a monster acting before then still meets
+  // the lowered stats and reads a debuff this just cleared (floor 8's mind
+  // flayer: Extract Brain off a confusion a remedy already cured).
+  refresh_player_stats();
   sprintf(battle_pre_message, str_items_use_remedy);
   SKIP_POST_MSG;
 }

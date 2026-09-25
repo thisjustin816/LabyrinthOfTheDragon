@@ -251,10 +251,19 @@ static void bugbear_take_turn(Monster *monster) {
   ) {
     sprintf(battle_pre_message, str_monster_bugbear_for_hruggek, monster->id);
     if (roll_attack_monster(monster->atk, player.mdef)) {
-      apply_scared(encounter.player_status_effects, C_TIER, 2, 0);
-      sprintf(battle_post_message, str_monster_bugbear_for_hruggek_hit);
+      // The roar spends its charge even when the fear doesn't take hold (a
+      // stronger fear is active or every effect slot is full). Only the text
+      // and sound depend on whether it stuck.
+      StatusEffectResult result = apply_scared(
+        encounter.player_status_effects, C_TIER, 2, player.debuff_immune);
       monster->parameter--;
-      SFX_MAGIC;
+      if (result == STATUS_RESULT_SUCCESS) {
+        sprintf(battle_post_message, str_monster_bugbear_for_hruggek_hit);
+        SFX_MAGIC;
+      } else {
+        sprintf(battle_post_message, str_monster_bugbear_for_hruggek_miss);
+        SFX_FAIL;
+      }
     } else {
       sprintf(battle_post_message, str_monster_bugbear_for_hruggek_miss);
       SFX_FAIL;
@@ -306,7 +315,8 @@ void bugbear_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
   m->mdef_base = get_monster_def(level_offset(level, 2), tier);
   m->agl_base = get_agl(level_offset(level, 3), tier);
 
-  m->debuff_immune = DEBUFF_BLIND | DEBUFF_CONFUSED | DEBUFF_POISONED;
+  m->debuff_immune =
+    FLAG_DEBUFF_BLIND | FLAG_DEBUFF_CONFUSED | FLAG_DEBUFF_POISONED;
   m->parameter = 1;
 
   m->bank = BANK_6;
@@ -476,7 +486,8 @@ void gelatinous_cube_generator(
 
   m->aspect_resist = DAMAGE_PHYSICAL;
   m->aspect_vuln = DAMAGE_MAGICAL;
-  m->debuff_immune = DEBUFF_POISONED | DEBUFF_BLIND | DEBUFF_SCARED;
+  m->debuff_immune =
+    FLAG_DEBUFF_POISONED | FLAG_DEBUFF_BLIND | FLAG_DEBUFF_SCARED;
   m->special_immune = SPECIAL_SLEET_STORM;
 
   // Number of times they can execute the "consume" ability
@@ -497,7 +508,7 @@ static void displacer_beast_take_turn(Monster *monster) {
     battle_pre_message, str_monster_displacer_beast_tentacle, monster->id);
 
   bool hit1 = roll_attack_monster(monster->atk, player.def);
-  bool hit2 = roll_attack_monster(level_offset(monster->atk, -7), player.def);
+  bool hit2 = roll_attack_monster(stat_minus(monster->atk, 7), player.def);
 
   uint8_t tier = monster->exp_tier > B_TIER ? A_TIER : C_TIER;
 
@@ -573,12 +584,17 @@ static void will_o_wisp_take_turn(Monster *monster) {
   // Phase terror!
   if (d8() < monster->parameter) {
     sprintf(battle_pre_message, str_monster_will_o_wisp_scare, monster->id);
-    if (roll_attack_monster(monster->matk, level_offset(player.mdef, -5))) {
+    if (roll_attack_monster(monster->matk, stat_minus(player.mdef, 5))) {
       const uint8_t scared_turns[4] = { 2, 3, 5, 7 };
-      apply_scared(encounter.player_status_effects,
+      StatusEffectResult result = apply_scared(encounter.player_status_effects,
         A_TIER, scared_turns[monster->exp_tier], player.debuff_immune);
-      sprintf(battle_post_message, str_monster_will_o_wisp_scare_hit);
-      SFX_MAGIC;
+      if (result == STATUS_RESULT_SUCCESS) {
+        sprintf(battle_post_message, str_monster_will_o_wisp_scare_hit);
+        SFX_MAGIC;
+      } else {
+        sprintf(battle_post_message, str_monster_will_o_wisp_scare_miss);
+        SFX_FAIL;
+      }
     } else {
       sprintf(battle_post_message, str_monster_will_o_wisp_scare_miss);
       SFX_FAIL;
@@ -611,7 +627,7 @@ void will_o_wisp_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
 
   m->aspect_resist = DAMAGE_PHYSICAL;
   m->aspect_vuln = DAMAGE_LIGHT;
-  m->debuff_immune = DAMAGE_DARK;
+  m->aspect_immune = DAMAGE_DARK;
 
   const uint8_t phase_terror_chance[4] = { 1, 2, 3, 4 };
   m->parameter = phase_terror_chance[tier];
@@ -688,7 +704,7 @@ void deathknight_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
 
   m->aspect_resist = DAMAGE_MAGICAL;
   m->aspect_vuln = DAMAGE_LIGHT;
-  m->debuff_immune = DAMAGE_DARK;
+  m->aspect_immune = DAMAGE_DARK;
 
   m->bank = BANK_6;
   m->take_turn = deathknight_take_turn;

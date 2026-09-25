@@ -11,6 +11,11 @@
 #define MAX_ABILITIES 6
 
 /**
+ * Highest level a player can reach (the stat tables have 99 rows).
+ */
+#define MAX_PLAYER_LEVEL 99
+
+/**
  * Level to set for new characters.
  */
 #define NEW_CHARACTER_LEVEL 5
@@ -204,8 +209,8 @@ typedef struct Player {
    */
   uint8_t aspect_vuln;
   /**
-   * Debuff immunity. Each bit corresponds to a different immunity.
-   * @see `StatusEffectImmunity`
+   * Debuff immunity. Each bit corresponds to a different debuff.
+   * @see `DebuffFlag`
    */
   uint8_t debuff_immune;
   /**

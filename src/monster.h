@@ -157,8 +157,8 @@ typedef struct Monster {
    */
   uint8_t aspect_vuln;
   /**
-   * Debuff immunity.
-   * @see `StatusEffectImmunity`
+   * Debuff immunity. Each bit corresponds to a different debuff.
+   * @see `DebuffFlag`
    */
   uint8_t debuff_immune;
   /**

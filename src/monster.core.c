@@ -62,6 +62,7 @@ void monster_init_instance(
   monster->aspect_resist = 0;
   monster->aspect_vuln = 0;
   monster->debuff_immune = 0;
+  monster->special_immune = 0;
   monster->can_flee = true;
   monster->fled = false;
   monster->parameter = 0;

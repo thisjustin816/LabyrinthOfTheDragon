@@ -298,9 +298,17 @@ inline Monster *get_monster(uint8_t idx) {
 }
 
 /**
- * Resets player combat stats and flags at the start of each round.
+ * Sets the player's combat stats to their bases and clears the battle's fled
+ * and died flags.
  */
 void reset_player_stats(void) NONBANKED;
+
+/**
+ * Sets the player's stats from their bases and active status effects, and
+ * rebuilds the buff and debuff flags from the same list. It starts from
+ * reset_player_stats(), so it also clears the battle's fled and died flags.
+ */
+void refresh_player_stats(void) BANKED;
 
 /**
  * Resets a monster's combat stats and flags at the start of each round.
