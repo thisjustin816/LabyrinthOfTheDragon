@@ -1,0 +1,5 @@
+shots/
+*_results.json
+.venv/
+# Play-test savestates: per-run, and stale against any later ROM.
+playtest/ckpt/

@@ -76,5 +76,8 @@ dkms.conf
 # Node Modules (for tools)
 node_modules/
 
+# Python bytecode (for tools)
+__pycache__/
+
 # OS Trash
 .DS_Store
