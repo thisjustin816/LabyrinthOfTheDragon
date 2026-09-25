@@ -497,6 +497,9 @@ addNamespace('credits', 1, {
   'nh_patreon2': 'patreon.com/',
   'nh_patreon3': '   NesHacker',
 
+  'fork': '1.1 FORK',
+  'fork_by': 'thisJUSTin816',
+
   'thank_you': 'Thank you',
   'for_playing': 'for playing!',
 });

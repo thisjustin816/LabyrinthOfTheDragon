@@ -30,7 +30,8 @@ typedef enum TextPage {
   CREDIT_TEXT_PROG_DESIGN = 4,
   CREDIT_TEXT_ART = 5,
   CREDIT_TEXT_PATREON = 6,
-  CREDIT_TEXT_THANK_YOU = 7,
+  CREDIT_TEXT_FORK = 7,
+  CREDIT_TEXT_THANK_YOU = 8,
 } TextPage;
 
 palette_color_t credits_palette[] = {
@@ -92,6 +93,10 @@ void next_text_page(void) {
     core.draw_text(VRAM_BACKGROUND_XY(1, 7), str_credits_nh_patreon, 20);
     core.draw_text(VRAM_BACKGROUND_XY(2, 9), str_credits_nh_patreon2, 20);
     core.draw_text(VRAM_BACKGROUND_XY(2, 10), str_credits_nh_patreon3, 20);
+    break;
+  case CREDIT_TEXT_FORK:
+    core.draw_text(VRAM_BACKGROUND_XY(4, 7), str_credits_fork, 20);
+    core.draw_text(VRAM_BACKGROUND_XY(4, 8), str_credits_fork_by, 20);
     break;
   case CREDIT_TEXT_THANK_YOU:
     core.draw_text(VRAM_BACKGROUND_XY(4, 8), str_credits_thank_you, 20);

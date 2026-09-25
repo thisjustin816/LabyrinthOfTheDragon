@@ -13,8 +13,20 @@ ROM_BANKS=32
 RAM_BANKS=4
 CART_TYPE=0x1B
 
+# The game's major and minor version. Every build adds the patch, the number of
+# commits since this line last changed, and shows the result on the file screen:
+# v1.1.4 from `make RELEASE=1`, and v1.1.4+ from any other build. Keep the
+# changelog's latest heading and the credits card's fork line in step with it.
+VERSION=1.1
+
+# Cartridge header: the title (up to 11 characters) and the mask-ROM version
+# byte at 0x14C, which carries the major version.
+ROM_TITLE=LABYRINTH
+ROM_VERSION=$(firstword $(subst ., ,$(VERSION)))
+
 LCC = $(GBDK_HOME)bin/lcc
-LCCFLAGS = -Wm-yC -Wm-yt$(CART_TYPE) -Wl-yo$(ROM_BANKS) -Wl-ya$(RAM_BANKS)
+LCCFLAGS = -Wm-yC -Wm-yt$(CART_TYPE) -Wl-yo$(ROM_BANKS) -Wl-ya$(RAM_BANKS) \
+	-Wm-yn"$(ROM_TITLE)" -Wm-yp0x14C=$(ROM_VERSION)
 
 PNG2BIN := ./tools/png2bin
 TABLES2C := ./tools/tables2c
