@@ -444,6 +444,11 @@ typedef enum MapState {
    * The map should teleport the player to the specified location.
    */
   MAP_STATE_TELEPORT,
+  /**
+   * The pause menu's QUIT was confirmed and the fade out has finished: the
+   * display is handed to the title screen.
+   */
+  MAP_STATE_QUIT,
 } MapState;
 
 /**
@@ -1026,14 +1031,30 @@ typedef struct TileOverrideHashEntry {
 typedef enum MapMenuState {
   MAP_MENU_CLOSED,
   MAP_MENU_OPEN,
+  /**
+   * QUIT was chosen once and the "QUIT THE GAME?" prompt, with YES and NO, is
+   * showing.
+   */
+  MAP_MENU_CONFIRM_QUIT,
+  /**
+   * QUIT was confirmed; the map should leave for the title screen.
+   */
+  MAP_MENU_QUIT,
+  /**
+   * The item picker is open in the message row. LEFT / RIGHT cycle the usable
+   * healing items, A drinks one, B goes back to the options.
+   */
+  MAP_MENU_ITEMS,
 } MapMenuState;
 
 /**
  * Cursor positions for the map menu.
  */
 typedef enum MapMenuCursor {
+  MAP_MENU_CURSOR_RETURN,
   MAP_MENU_CURSOR_SAVE,
   MAP_MENU_CURSOR_QUIT,
+  MAP_MENU_CURSOR_ITEMS,
 } MapMenuCursor;
 
 /**
@@ -1248,32 +1269,38 @@ void return_from_battle(void) NONBANKED;
 /**
  * Clears all active map sprites.
  */
-void clear_map_sprites(void);
+void clear_map_sprites(void) BANKED;
+
+/**
+ * Loads the torch gauge's colors for the flame the player is carrying into
+ * `TORCH_GAUGE_PALETTE`.
+ *
+ * Whatever borrows that slot while the HUD is hidden gives it back through
+ * here. It is BANKED because the palette table is bank 2 data and
+ * `core.load_sprite_palette()` dereferences the pointer with the caller's bank
+ * mapped, so a caller in another bank would read its own bank's bytes.
+ */
+void reload_torch_gauge_palette(void) BANKED;
 
 /**
  * Initializes the map menu.
  */
-void init_map_menu(void);
+void init_map_menu(void) BANKED;
 
 /**
  * Performs game loop updates for the map menu.
  */
-void update_map_menu(void);
+void update_map_menu(void) BANKED;
 
 /**
  * Updates HP/SP for the map menu.
  */
-void update_map_menu_hp_sp(void);
+void update_map_menu_hp_sp(void) BANKED;
 
 /**
  * Opens the map menu.
  */
-void show_map_menu(void);
-
-/**
- * Closes the map menu.
- */
-void hide_map_menu(void);
+void show_map_menu(void) BANKED;
 
 /**
  * Forces the player to take an exit.

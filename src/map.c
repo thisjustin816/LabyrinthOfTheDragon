@@ -13,6 +13,7 @@
 #include "floor.h"
 #include "map.h"
 #include "sound.h"
+#include "title_screen.h"
 
 Exit active_exit;
 MapState map_state;
@@ -1135,12 +1136,16 @@ static void place_magic_key_hud(void) {
   }
 }
 
+void reload_torch_gauge_palette(void) BANKED {
+  core.load_sprite_palette(
+    torch_gauge_palettes + player.torch_color * 4, TORCH_GAUGE_PALETTE, 1);
+}
+
 /**
  * Initializes the player hud (torch gauge, keys, floor, etc.).
  */
 static void init_hud(void) {
-  const palette_color_t *tgp = torch_gauge_palettes + player.torch_color * 4;
-  core.load_sprite_palette(tgp, TORCH_GAUGE_PALETTE, 1);
+  reload_torch_gauge_palette();
   core.load_sprite_palette(magic_keys_palette, MAGIC_KEY_HUD_PALETTE, 1);
 
   set_sprite_tile(TORCH_GAUGE_FLAME, FLAME_TILE_1);
@@ -1262,7 +1267,7 @@ static void clear_hud(void) {
   move_sprite(MAGIC_KEY_QTY, 0, 0);
 }
 
-void clear_map_sprites(void) {
+void clear_map_sprites(void) BANKED {
   clear_hero();
   clear_flames();
   clear_hud();
@@ -1287,7 +1292,7 @@ static void burn_torch(void) {
   player.torch_gauge--;
   if (player.torch_gauge == 0) {
     player.torch_color = FLAME_NONE;
-    core.load_sprite_palette(torch_gauge_palettes, TORCH_GAUGE_PALETTE, 1);
+    reload_torch_gauge_palette();
   }
 }
 
@@ -1310,6 +1315,35 @@ static void map_fade_in(MapState to_state) {
   fade_to_state = to_state;
   fade_in();
   map_state = MAP_STATE_FADE_IN;
+}
+
+/**
+ * Tears the world map down after a fade out so another screen can build
+ * itself: display off, the pause menu's BG-map switch and scroll undone, the
+ * fade's sprite toggle undone, every sprite and the window hidden.
+ */
+static void leave_world_map(void) {
+  DISPLAY_OFF;
+  LCDC_REG &= 0b11110111;
+  SHOW_SPRITES;
+  move_bkg(0, 0);
+  for (uint8_t k = 0; k < 40; k++)
+    move_sprite(k, 0, 0);
+  hide_window();
+
+  map_menu.state = MAP_MENU_CLOSED;
+  map_state = MAP_STATE_INACTIVE;
+}
+
+/**
+ * Leaves the world map for the title screen after the pause menu's QUIT was
+ * confirmed and the fade out finished. return_to_title_screen() skips the
+ * studio card, which has played once.
+ */
+static void quit_to_title(void) {
+  leave_world_map();
+  return_to_title_screen();
+  game_state = GAME_STATE_TITLE;
 }
 
 /**
@@ -2302,8 +2336,7 @@ static bool check_doors(void) {
 static void light_torch(FlameColor color) {
   player.torch_gauge = TORCH_STEPS;
   player.torch_color = color;
-  const palette_color_t *palette = torch_gauge_palettes + color * 4;
-  core.load_sprite_palette(palette, TORCH_GAUGE_PALETTE, 1);
+  reload_torch_gauge_palette();
 }
 
 /**
@@ -2597,6 +2630,13 @@ void update_map(void) {
       init_npcs();
       break;
     }
+    if (map_menu.state == MAP_MENU_QUIT) {
+      // Fade the menu out; MAP_STATE_QUIT then hands off to the title.
+      map_fade_out(MAP_STATE_QUIT);
+    }
+    return;
+  case MAP_STATE_QUIT:
+    quit_to_title();
     return;
   case MAP_STATE_INITIATE_BATTLE:
     init_timer(battle_wait_timer, 30);

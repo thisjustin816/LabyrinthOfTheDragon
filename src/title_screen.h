@@ -13,4 +13,11 @@ void init_title_screen(void) BANKED;
  */
 void update_title_screen(void) BANKED;
 
+
+/**
+ * Returns to the main title (skipping the intro), e.g. after QUIT in the
+ * pause menu.
+ */
+void return_to_title_screen(void) BANKED;
+
 #endif

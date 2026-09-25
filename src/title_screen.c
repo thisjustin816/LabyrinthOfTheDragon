@@ -99,6 +99,25 @@ void init_title_screen(void) BANKED {
   DISPLAY_ON;
 }
 
+void return_to_title_screen(void) BANKED {
+  DISPLAY_OFF;
+
+  scroll_bkg(0, 0);
+  core.load_bg_palette(default_palette, 0, 8);
+  core.load_sprite_palette(default_palette, 0, 8);
+  core.fill_bg(0xFF, 0b00001010);
+  core.fill(VRAM_WINDOW, 32, 32, 0xFF, 0b00001010);
+  core.load_title_tiles();
+  core.draw_tilemap(title_screen_tilemap, VRAM_BACKGROUND);
+  clear_sprites();
+
+  // Straight to the main title; the studio card has already played once.
+  title_state = TITLE_MAIN;
+  init_main_title();
+
+  DISPLAY_ON;
+}
+
 void update_title_screen(void) BANKED {
   switch (title_state) {
   case TITLE_NESHACKER_PRESENTS:
