@@ -137,13 +137,20 @@
 
 /**
  * Horizontal position of the magic keys HUD sprites.
+ *
+ * Tile column 17 of 20, which leaves the counter the same margin on the right
+ * that the torch gauge has on the left.
  */
-#define MAGIC_KEYS_X 16 + 8 * 6
+#define MAGIC_KEYS_X (8 + 8 * 17)
 
 /**
  * Vertical position for the magic keys HUD sprites.
+ *
+ * Shares the torch gauge's top edge. The key graphic is two tiles tall, so it
+ * hangs a row below the gauge, and the quantity digit sits one pixel down from
+ * here, centered on the gauge's row.
  */
-#define MAGIC_KEYS_Y 22
+#define MAGIC_KEYS_Y TORCH_GAUGE_Y
 
 /**
  * Sprite id for the top "key" graphic sprite.
@@ -181,6 +188,12 @@
 #define MAGIC_KEY_NUM_0 0x30
 
 /**
+ * Tile id for the "*" shown in place of the key quantity above 9, which one
+ * digit can't show.
+ */
+#define MAGIC_KEY_MANY 0x3A
+
+/**
  * Palette to use for the magic keys hud.
  */
 #define MAGIC_KEY_HUD_PALETTE 5
@@ -213,42 +226,42 @@
 /**
  * Maximum maps per floor.
  */
-#define MAX_MAPS 4 + 1
+#define MAX_MAPS (4 + 1)
 
 /**
  * Maximum exits per floor.
  */
-#define MAX_EXITS 24 + 1
+#define MAX_EXITS (24 + 1)
 
 /**
  * Maximum chests per floor.
  */
-#define MAX_CHESTS 8 + 1
+#define MAX_CHESTS (8 + 1)
 
 /**
  * Maximum signs per floor.
  */
-#define MAX_SIGNS 8 + 1
+#define MAX_SIGNS (8 + 1)
 
 /**
  * Maximum levers per floor.
  */
-#define MAX_LEVERS 8 + 1
+#define MAX_LEVERS (8 + 1)
 
 /**
  * Max sconces per floor.
  */
-#define MAX_SCONCES 32 + 1
+#define MAX_SCONCES (32 + 1)
 
 /**
  * Max NPCs per floor.
  */
-#define MAX_NPCS 2 + 1
+#define MAX_NPCS (2 + 1)
 
 /**
  * Max doors per floor.
  */
-#define MAX_DOORS 12 + 1
+#define MAX_DOORS (12 + 1)
 
 /**
  * Sconce flame sprite ids.
@@ -614,6 +627,9 @@ typedef struct Chest {
    * @param chest The chest the player is attempting to open.
    * @return `true` if the default opening behavior for the chest should be
    *   prevented.
+   *
+   * Must live in floor_common.c (bank 2): map.c's on_open() trampoline calls
+   * this without a bank switch, unlike every other object callback.
    */
   bool (*on_open)(const struct Chest *chest);
 } Chest;
@@ -1184,12 +1200,13 @@ inline void set_map_position(int8_t x, int8_t y) {
  */
 inline void set_hero_position(int8_t x, int8_t y) {
   map_x = x - HERO_X_OFFSET;
-  map_y = y - HERO_X_OFFSET;
+  map_y = y - HERO_Y_OFFSET;
 }
 
 /**
- * Sets the active floor for the map system. An active floor must be set prior
- * to initializing map system controller.
+ * Sets the active floor for the map system: loads its data, resets its
+ * objects to their ROM defaults, and runs its `on_load`. An active floor must
+ * be set prior to initializing map system controller.
  * @param floor Floor to set.
  */
 void set_active_floor(FloorBank *f) BANKED;
@@ -1207,7 +1224,7 @@ void update_world_map(void) NONBANKED;
 /**
  * VBLANK draw routine for the world map controller.
  */
-void draw_world_map(void);
+void draw_world_map(void) NONBANKED;
 
 /**
  * Initiates battle using the currently configured encounter. This should be

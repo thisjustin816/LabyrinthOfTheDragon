@@ -246,7 +246,7 @@ static void draw_hp_bar(MonsterPosition pos, uint16_t hp, uint16_t max) {
   // Calculate the number of pips based on the ratio of HP to Max HP
   uint32_t k = 40;
   k *= hp;
-  k /= max;
+  k /= max ? max : 1;
   uint8_t p = k;
 
   // Update the attributes based on HP percentage
@@ -658,6 +658,18 @@ static inline void draw_submenu_heading(void) {
 }
 
 /**
+ * Fills a submenu row with spaces. The rows are drawn with draw_text, which
+ * maps ' ' to FONT_SPACE; writing FONT_SPACE itself would be offset again into
+ * tile 0x20.
+ * @param row Row buffer, 18 characters and a terminator.
+ */
+static void blank_menu_row(char *row) {
+  for (uint8_t k = 0; k < 18; k++)
+    row[k] = ' ';
+  row[18] = 0;
+}
+
+/**
  * Pre renders entry text for the player's inventory into a buffer. This allows
  * the items to be quickly rendered when the submenu is opened.
  */
@@ -677,10 +689,8 @@ static void render_item_text(void) {
   battle_menu.inventory_entries = p;
 
   while (p < INVENTORY_LEN) {
-    for (uint8_t k = 0; k < 18; k++) {
-      battle_menu.item_text[p][k] = (char)FONT_SPACE;
-      battle_menu.item_at[p] = ITEM_INVALID;
-    }
+    blank_menu_row(battle_menu.item_text[p]);
+    battle_menu.item_at[p] = ITEM_INVALID;
     p++;
   }
 }
@@ -697,20 +707,30 @@ static void update_item_text_at_cursor(void) {
 }
 
 /**
+ * Points the open submenu at `entries` lines and moves the scroll ceiling with
+ * it. Does not touch the cursor or the current scroll position.
+ */
+static void set_submenu_entries(uint8_t entries) {
+  battle_menu.entries = entries;
+  battle_menu.max_scroll =
+    entries <= SUBMENU_ROWS ? 0 : entries - SUBMENU_ROWS;
+}
+
+/**
  * Removes the text for the item at the cursor if the last one was used.
  */
 static void remove_item_text_at_cursor(void) {
   const uint8_t cursor = battle_menu.cursor;
   const uint8_t entries = battle_menu.inventory_entries - 1;
 
-  for (uint8_t c = 0; c < 18; c++) {
-    battle_menu.item_text[cursor][c] = (char)FONT_SPACE;
-    battle_menu.item_at[cursor] = ITEM_INVALID;
-  }
+  for (uint8_t c = 0; c < 18; c++)
+    battle_menu.item_text[cursor][c] = ' ';
+  battle_menu.item_text[cursor][18] = 0;
+  battle_menu.item_at[cursor] = ITEM_INVALID;
 
   for (uint8_t k = cursor; k < entries; k++) {
     battle_menu.item_at[k] = battle_menu.item_at[k + 1];
-    for (uint8_t c = 0; c < 18; c++)
+    for (uint8_t c = 0; c < 19; c++)
       battle_menu.item_text[k][c] = battle_menu.item_text[k + 1][c];
   }
 
@@ -738,8 +758,7 @@ static void render_ability_text(void) {
   }
 
   while (a < MAX_ABILITIES) {
-    for (uint8_t k = 0; k < 18; k++)
-      battle_menu.ability_text[a][k] = (char)FONT_SPACE;
+    blank_menu_row(battle_menu.ability_text[a]);
     a++;
   }
 }
@@ -784,7 +803,8 @@ static void redraw_submenu_text(void) {
     return;
   }
 
-  const uint8_t max = battle_menu.entries < 4 ? battle_menu.entries : 4;
+  const uint8_t max =
+    battle_menu.entries < SUBMENU_ROWS ? battle_menu.entries : SUBMENU_ROWS;
   uint8_t *vram = VRAM_SUBMENU_TEXT;
 
   if (battle_menu.active_menu == BATTLE_MENU_ABILITY) {
@@ -799,10 +819,10 @@ static void redraw_submenu_text(void) {
     }
   }
 
-  if (max >= 4)
+  if (max >= SUBMENU_ROWS)
     return;
 
-  for (uint8_t j = 0; j < 4 - max; j++, vram += 32 - 18) {
+  for (uint8_t j = 0; j < SUBMENU_ROWS - max; j++, vram += 32 - 18) {
     for (uint8_t x = 0; x < 18; x++, vram++)
       set_vram_byte(vram, FONT_SPACE);
   }
@@ -826,10 +846,9 @@ static void load_submenu(BattleMenuType menu) {
     battle_menu.inventory_entries;
 
   battle_menu.active_menu = menu;
-  battle_menu.entries = entries;
+  set_submenu_entries(entries);
   battle_menu.cursor = 0;
   battle_menu.scroll = 0;
-  battle_menu.max_scroll = entries <= 4 ? 0 : entries - 4;
 
   draw_submenu_heading();
   draw_submenu_scroll_arrows();
@@ -837,7 +856,7 @@ static void load_submenu(BattleMenuType menu) {
   if (battle_menu.entries == 0) {
     hide_cursor();
     uint8_t *vram = VRAM_BACKGROUND_XY(SUBMENU_TEXT_X, SUBMENU_TEXT_Y);
-    for (uint8_t y = 0; y < 4; y++) {
+    for (uint8_t y = 0; y < SUBMENU_ROWS; y++) {
       for (uint8_t x = 0; x < 18; x++)
         set_vram_byte(vram++, FONT_SPACE);
       vram += 14;
@@ -864,10 +883,10 @@ static void submenu_cursor_up(void) {
     if (battle_menu.entries == 1)
       return;
     battle_menu.cursor = battle_menu.entries - 1;
-    if (battle_menu.entries <= 4)
+    if (battle_menu.entries <= SUBMENU_ROWS)
       move_screen_cursor(BATTLE_CURSOR_ITEM_1 + battle_menu.cursor);
     else {
-      battle_menu.scroll = battle_menu.entries - 4;
+      battle_menu.scroll = battle_menu.entries - SUBMENU_ROWS;
       move_screen_cursor(BATTLE_CURSOR_ITEM_4);
     }
     redraw_submenu_text();
@@ -1073,7 +1092,10 @@ static inline void update_battle_menu(void) {
     else if (was_pressed(J_A)) {
       ItemId item_id = battle_menu.item_at[battle_menu.cursor];
 
-      if (!can_use_item(item_id)) {
+      // An empty submenu has no item under the cursor; don't index the
+      // inventory with ITEM_INVALID.
+      if (battle_menu.entries == 0 || item_id == ITEM_INVALID ||
+          !can_use_item(item_id)) {
         play_sound(sfx_error);
         break;
       }
@@ -1285,8 +1307,13 @@ static void clear_inactive_monsters(void) {
  * LCY interrupt handler for the fight and skill menus. This handler changes the
  * scroll-y position at a specific scanline to display a different part of the
  * background that contains the graphics for these menus.
+ *
+ * NONBANKED: interrupt handlers are entered with whatever ROM bank happens to
+ * be paged in. Battle mostly runs from bank 3, but monster turns, stat lookups
+ * and sound page in other banks, and an LYC interrupt landing then would have
+ * executed that bank's bytes at this address.
  */
-static void fight_menu_isr(void) {
+static void fight_menu_isr(void) NONBANKED {
   SCY_REG = 0;
   if (
     battle_state == BATTLE_STATE_MENU &&

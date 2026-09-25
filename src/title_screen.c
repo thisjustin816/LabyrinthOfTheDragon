@@ -416,6 +416,8 @@ static const palette_color_t main_bg_palettes[] = {
   RGB8(251, 242, 54), RGB_BLACK, RGB_BLACK, RGB_BLACK,
 };
 
+#define PRESS_START_PALETTE 5
+
 static const palette_color_t dragon_palette_frames[] = {
   // FRAME 1 -------------------------------------------------------------------
   // Palette 2 - Face
@@ -445,7 +447,10 @@ Timer flame_palette_timer;
 
 void init_main_title(void) {
   move_win(0, 144);
-  core.load_bg_palette(main_bg_palettes, 0, 6);
+  // PRESS START stays black through the fire, which ignores START, and
+  // update_fire_animation lights it once the button is read.
+  core.load_bg_palette(main_bg_palettes, 0, 5);
+  core.load_bg_palette(default_palette, PRESS_START_PALETTE, 1);
   core.load_sprite_palette(main_fg_palettes, 0, 2);
 
   play_sound(sfx_title_fire);
@@ -570,6 +575,8 @@ void update_fire_animation(void) {
     fire_frame_idx = END;
     clear_sprites();
     init_smoke_animation();
+    core.load_bg_palette(
+      main_bg_palettes + 4 * PRESS_START_PALETTE, PRESS_START_PALETTE, 1);
     main_title_state = MAIN_WAIT_FOR_INPUT;
     return;
   }

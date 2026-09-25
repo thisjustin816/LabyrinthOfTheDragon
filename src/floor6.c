@@ -272,9 +272,7 @@ static void on_boss_victory(void) BANKED {
 
 static void on_elite_victory(void) BANKED {
   set_npc_invisible(NPC_2);
-  grant_ability(ABILITY_5);
-  play_sound(sfx_big_powerup);
-  map_textbox(get_grant_message(ABILITY_5));
+  teach_elite_ability(ABILITY_5);
 }
 static bool on_boss_encouter(void) {
   Monster *monster = encounter.monsters;
@@ -435,24 +433,28 @@ static bool on_special(void) {
     if (player_at(1, 2)) {
       play_sound(sfx_no_no_square);
       teleport(MAP_A, 2, 21, UP, EXIT_PORTAL);
+      return true;
     }
     break;
   case 1:
     if (player_at(3, 2)) {
       play_sound(sfx_no_no_square);
       teleport(MAP_A, 26, 21, UP, EXIT_PORTAL);
+      return true;
     }
     break;
   case 2:
     if (player_at(13, 2)) {
       play_sound(sfx_no_no_square);
       teleport(MAP_A, 22, 29, LEFT, EXIT_PORTAL);
+      return true;
     }
     break;
   case 3:
     if (player_at(15, 2)) {
       play_sound(sfx_no_no_square);
       teleport(MAP_A, 12, 21, UP, EXIT_PORTAL);
+      return true;
     }
     break;
   }

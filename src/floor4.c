@@ -328,9 +328,7 @@ static void on_boss_victory(void) BANKED {
 
 static void on_elite_victory(void) BANKED {
   set_npc_invisible(NPC_2);
-  grant_ability(ABILITY_3);
-  play_sound(sfx_big_powerup);
-  map_textbox(get_grant_message(ABILITY_3));
+  teach_elite_ability(ABILITY_3);
 }
 
 static bool on_boss_encouter(void) {

@@ -18,6 +18,10 @@ void config_random_encounter(uint8_t s, uint8_t ic, uint8_t i, bool ts) {
   initial_chance = ic;
   chance_increase = i;
   torch_safe = ts;
+  // Floors call this on every arrival, including a new game and a return from
+  // death, so each starts its own ramp rather than inheriting the last floor's.
+  steps = 0;
+  current_chance = ic;
 }
 
 bool check_random_encounter(void) {

@@ -66,6 +66,16 @@ bool floor7_chest_on_open(const Chest *chest);
 
 
 /**
+ * Teaches the ability an elite guards, for floors 2 to 6's elite victories.
+ * Each floor restores its elite when it loads, so after a death the hero can
+ * beat an elite whose ability they already know. That hero is told there is
+ * nothing left to learn instead.
+ *
+ * @param flag The ability this floor's elite teaches.
+ */
+void teach_elite_ability(AbilityFlag flag) BANKED;
+
+/**
  * Initializes the teleporter color animation.
  */
 void init_teleporter_animation(uint8_t p, const palette_color_t *colors) NONBANKED;

@@ -122,7 +122,7 @@ void update_credits(void) BANKED {
       return;
 
     DISPLAY_OFF;
-    toggle_sprites();
+    HIDE_SPRITES;
 
     scroll_bkg(0, 0);
     next_text_page();
@@ -167,6 +167,8 @@ void update_credits(void) BANKED {
   case CREDITS_FIN:
     if (was_pressed(J_START)) {
       DISPLAY_OFF;
+      // The screens after this expect sprites on, as they are everywhere else.
+      SHOW_SPRITES;
       init_title_screen();
       game_state = GAME_STATE_TITLE;
     }

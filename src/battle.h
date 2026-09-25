@@ -145,6 +145,11 @@
 #define SUBMENU_TEXT_X 1
 
 /**
+ * Entries a submenu shows at once; longer lists scroll.
+ */
+#define SUBMENU_ROWS 4
+
+/**
  * Tile with full pips for the HP bar.
  */
 #define HP_BAR_FULL_PIPS 0x58
@@ -331,8 +336,9 @@ typedef struct BattleMenu {
   uint8_t scroll;
   uint8_t max_scroll;
   const Ability *active_ability;
-  char ability_text[MAX_ABILITIES][18];
-  char item_text[INVENTORY_LEN][18];
+  // 18 visible characters plus the terminating NUL that sprintf writes.
+  char ability_text[MAX_ABILITIES][19];
+  char item_text[INVENTORY_LEN][19];
   ItemId item_at[INVENTORY_LEN];
   uint8_t inventory_entries;
 } BattleMenu;

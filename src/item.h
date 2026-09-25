@@ -81,7 +81,7 @@ inline uint8_t remove_item(ItemId id) {
 inline void clear_inventory(void) {
   Item *item = inventory;
   for (uint8_t k = 0; k < 8; k++, item++)
-    inventory->quantity = 0;
+    item->quantity = 0;
 }
 
 /**

@@ -1132,6 +1132,7 @@ void init_player(PlayerClass player_class) BANKED {
 
   player.has_torch = false;
   player.magic_keys = 0;
+  player.got_magic_key = false;
   clear_inventory();
 
   set_class_abilities();

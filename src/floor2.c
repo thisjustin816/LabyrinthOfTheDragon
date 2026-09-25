@@ -266,9 +266,7 @@ static const Sconce sconces[] = {
 
 static void elite_victory(void) BANKED {
   set_npc_invisible(NPC_1);
-  grant_ability(ABILITY_1);
-  play_sound(sfx_big_powerup);
-  map_textbox(get_grant_message(ABILITY_1));
+  teach_elite_ability(ABILITY_1);
 }
 
 static bool elite_encounter(void) {
@@ -328,7 +326,7 @@ static const NPC npcs[] = {
   }
   */
 
-  { NPC_1, MAP_A, 3, 5, MONSTER_BUGBEAR, B_TIER, on_npc_action }, // Elite
+  { NPC_1, MAP_A, 3, 5, MONSTER_BUGBEAR, A_TIER, on_npc_action }, // Elite
   { NPC_2, MAP_A, 10, 3, MONSTER_OWLBEAR, S_TIER, on_npc_action }, // Boss
   { END }
 };

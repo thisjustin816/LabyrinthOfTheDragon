@@ -285,8 +285,16 @@ static void list_copy(
       *dest++ = *source++;
       len--;
     }
-    if (record_id == END) break;
+    if (record_id == END) return;
   }
+  // The source had more than `max - 1` records: the list was copied without
+  // its terminator. Turn the last slot into one so that every loop over the
+  // destination still stops inside the array. The whole record is cleared
+  // first so that an id wider than a byte, like a door's, reads as END too.
+  uint8_t *last = dest - item_len;
+  for (size_t k = 0; k < item_len; k++)
+    last[k] = 0;
+  *last = END;
 }
 
 /**
@@ -398,6 +406,13 @@ static void on_draw(void) NONBANKED {
 
 /**
  * Calls the `on_open` callback for a chest.
+ *
+ * Unlike on_pull, on_lit, and on_npc_action, this does not switch to
+ * floor_bank->bank first: check_action() runs this from update_map() while
+ * bank 2 (this file's own bank) is paged in, and every chest's `on_open`
+ * lives in floor_common.c, which is also bank 2. A callback defined in a
+ * floorN.c file instead, like every other object callback, would call
+ * whatever bytes sit at that address in bank 2 instead of its own.
  */
 static bool on_open(const Chest *chest) NONBANKED {
   return chest->on_open(chest);
@@ -452,7 +467,8 @@ uint8_t get_sconce_index(SconceId sconce_id) NONBANKED {
   if (sconce_id == SCONCE_4) return 3;
   if (sconce_id == SCONCE_5) return 4;
   if (sconce_id == SCONCE_6) return 5;
-  return 6;
+  if (sconce_id == SCONCE_7) return 6;
+  return 7;
 }
 
 /**
@@ -485,7 +501,11 @@ static void hash_object(
 ) {
   uint8_t hash_idx = hash(map_id, x, y);
   TileHashEntry *entry = tile_object_hashtable + hash_idx;
+  uint8_t probes = TILE_HASHTABLE_SIZE;
   while (entry->data) {
+    // Table full: drop the object rather than probe forever.
+    if (--probes == 0)
+      return;
     hash_idx = (hash_idx + 1) & (TILE_HASHTABLE_SIZE - 1);
     entry = tile_object_hashtable + hash_idx;
   }
@@ -498,7 +518,10 @@ static void hash_object(
 }
 
 /**
- * TODO document me
+ * Looks up the tile override entry for a coordinate on the active map.
+ * @param x Column of the tile.
+ * @param y Row of the tile.
+ * @return The entry, or NULL if the tile has no override.
  */
 static TileOverrideHashEntry *find_override_entry(
   int8_t x,
@@ -508,10 +531,13 @@ static TileOverrideHashEntry *find_override_entry(
   uint8_t hash_idx = hash(map_id, x, y);
 
   TileOverrideHashEntry *entry = tile_override_hashtable + hash_idx;
+  uint8_t probes = TILE_HASHTABLE_SIZE;
   while (entry->map_id != 0xFF) {
     if (entry->map_id == map_id && entry->x == x && entry->y == y)
       return entry;
 
+    if (--probes == 0)
+      break;
     hash_idx = (hash_idx + 1) & (TILE_HASHTABLE_SIZE - 1);
     entry = tile_override_hashtable + hash_idx;
   }
@@ -520,17 +546,19 @@ static TileOverrideHashEntry *find_override_entry(
 }
 
 /**
- * TODO document me
+ * Finds the tile override entry for a map coordinate, creating one if the tile
+ * has none yet. Entries live in a 64-slot open-addressing table keyed by
+ * hash(map_id, x, y) with linear probing; the whole table is reset (every
+ * field 0xFF) when a floor loads and entries are never removed, so a slot that
+ * reads as free still holds the "no override" values for tile and palette.
  *
- * NOTE: There is a very weird bug with collisions going on when rewriting tiles
- *       and palettes. Turns out hashing (0,7,29) OR (0,9,26) OR (0,9,29) all
- *       hash to 58.
+ * Colliding coordinates are handled by the probing: floor 8's healing mirrors
+ * at (11,21) and (19,9) both hash to slot 2 and repaint only their own tiles.
  *
- *       *SOMEHOW* the collision is not bucketing correctly and it's causing an
- *       error where the tile for the wrong position gets overridden?
- *
- *       I am "fixing" this due to lack of time by shifting the tiles in level
- *       7's main floor so the collisions no longer take place. *sigh*
+ * @param map_id Map the tile is on.
+ * @param x Column of the tile.
+ * @param y Row of the tile.
+ * @return The entry, or NULL when the table is full.
  */
 static TileOverrideHashEntry *find_or_create_override_entry(
   uint8_t map_id,
@@ -539,11 +567,16 @@ static TileOverrideHashEntry *find_or_create_override_entry(
 ) {
   uint8_t hash_idx = hash(map_id, x, y);
   TileOverrideHashEntry *entry = tile_override_hashtable + hash_idx;
+  uint8_t probes = TILE_HASHTABLE_SIZE;
 
   while (entry->map_id != 0xFF) {
     // We've found the override entry for the given coordinates
     if (entry->map_id == map_id && entry->x == x && entry->y == y)
       return entry;
+
+    // Table full: nothing can be created.
+    if (--probes == 0)
+      return NULL;
 
     // Handle collisions
     hash_idx = (hash_idx + 1) & (TILE_HASHTABLE_SIZE - 1);
@@ -565,11 +598,14 @@ static TileHashEntry *get_hash_entry(int8_t x, int8_t y) {
   const uint8_t map_id = active_map->id;
   uint8_t hash_idx = hash(map_id, x, y);
   TileHashEntry *entry = tile_object_hashtable + hash_idx;
+  uint8_t probes = TILE_HASHTABLE_SIZE;
 
   while (entry->data) {
     if (entry->map_id == map_id && entry->x == x && entry->y == y)
       return entry;
 
+    if (--probes == 0)
+      break;
     hash_idx = (hash_idx + 1) & (TILE_HASHTABLE_SIZE - 1);
     entry = tile_object_hashtable + hash_idx;
   }
@@ -849,7 +885,6 @@ static void update_npcs(void) {
   ) {
     const uint8_t sprite_root = NPC_SPRITE_1 + 4 * pos;
 
-    *(debug + 1) = *(debug + 1) + 1;
 
     if (
       is_npc_visible(npc->id) &&
@@ -1002,6 +1037,11 @@ static void update_flames(void) {
 
   const Sconce *sconce;
   for (sconce = sconces; sconce->id != END; sconce++) {
+    // Flames use the last MAX_FLAME_SPRITES entries of OAM. A ninth would
+    // write past the end of the sprite table.
+    if (flame_id >= MAX_FLAME_SPRITES)
+      break;
+
     const uint8_t sprite_id = FLAME_SPRITE_ID0 + flame_id; //get_sconce_flame_sprite(sconce->id);
 
     if (
@@ -1060,6 +1100,25 @@ static void clear_flames(void) {
 }
 
 /**
+ * Positions the three magic key HUD sprites, or parks them off screen while
+ * the player has never found a key. The HUD's init and its per-frame update
+ * both place the sprites through this, so the two agree on the position.
+ */
+static void place_magic_key_hud(void) {
+  if (player.got_magic_key) {
+    // The casts only silence SDCC, which warns of an overflow when a folded
+    // constant above 127 reaches move_sprite()'s uint8_t parameters.
+    move_sprite(MAGIC_KEY_SPRITE_1, (uint8_t)MAGIC_KEYS_X, MAGIC_KEYS_Y);
+    move_sprite(MAGIC_KEY_SPRITE_2, (uint8_t)MAGIC_KEYS_X, MAGIC_KEYS_Y + 8);
+    move_sprite(MAGIC_KEY_QTY, (uint8_t)(MAGIC_KEYS_X + 9), MAGIC_KEYS_Y + 1);
+  } else {
+    move_sprite(MAGIC_KEY_SPRITE_1, 0, 0);
+    move_sprite(MAGIC_KEY_SPRITE_2, 0, 0);
+    move_sprite(MAGIC_KEY_QTY, 0, 0);
+  }
+}
+
+/**
  * Initializes the player hud (torch gauge, keys, floor, etc.).
  */
 static void init_hud(void) {
@@ -1110,15 +1169,7 @@ static void init_hud(void) {
   set_sprite_prop(MAGIC_KEY_SPRITE_2, MAGIC_KEY_HUD_ATTR);
   set_sprite_prop(MAGIC_KEY_QTY, MAGIC_KEY_HUD_ATTR);
 
-  if (player.got_magic_key) {
-    move_sprite(MAGIC_KEY_SPRITE_1, MAGIC_KEYS_X, MAGIC_KEYS_Y - 1);
-    move_sprite(MAGIC_KEY_SPRITE_2, MAGIC_KEYS_X, MAGIC_KEYS_Y + 7);
-    move_sprite(MAGIC_KEY_QTY, MAGIC_KEYS_X + 9, MAGIC_KEYS_Y);
-  } else {
-    move_sprite(MAGIC_KEY_SPRITE_1, 0, 0);
-    move_sprite(MAGIC_KEY_SPRITE_2, 0, 0);
-    move_sprite(MAGIC_KEY_QTY, 0, 0);
-  }
+  place_magic_key_hud();
 }
 
 /**
@@ -1176,16 +1227,10 @@ static void update_hud(void) {
     set_sprite_tile(TORCH_GAUGE_BODY_4, SPRITE_TILE_CLEAR);
   }
 
-  if (player.got_magic_key) {
-    move_sprite(MAGIC_KEY_SPRITE_1, MAGIC_KEYS_X, MAGIC_KEYS_Y);
-    move_sprite(MAGIC_KEY_SPRITE_2, MAGIC_KEYS_X, MAGIC_KEYS_Y + 8);
-    move_sprite(MAGIC_KEY_QTY, MAGIC_KEYS_X + 9, MAGIC_KEYS_Y + 1);
-    set_sprite_tile(MAGIC_KEY_QTY, MAGIC_KEY_NUM_0 + player.magic_keys);
-  } else {
-    move_sprite(MAGIC_KEY_SPRITE_1, 0, 0);
-    move_sprite(MAGIC_KEY_SPRITE_2, 0, 0);
-    move_sprite(MAGIC_KEY_QTY, 0, 0);
-  }
+  place_magic_key_hud();
+  if (player.got_magic_key)
+    set_sprite_tile(MAGIC_KEY_QTY, player.magic_keys > 9
+      ? MAGIC_KEY_MANY : MAGIC_KEY_NUM_0 + player.magic_keys);
 }
 
 /**
@@ -1669,7 +1714,6 @@ static void load_exit(void) {
   if (active_exit.to_floor) {
     execute_on_init = true;
     set_active_floor(active_exit.to_floor);
-    on_load();
   }
 
   active_map = maps + active_exit.to_map;
@@ -1743,7 +1787,12 @@ static void start_move(Direction d) {
     play_wall_hit_sfx = true;
   }
 
-  if (destination->map_attr == MAP_WALL) {
+  // A stairway is drawn into a wall and opens toward the bottom of the
+  // screen, so a step onto one from the side meets that wall.
+  bool stairs_side = (d == LEFT || d == RIGHT) &&
+    (destination->tile == DOOR_STAIRS_UP || destination->tile == DOOR_STAIRS_DOWN);
+
+  if (destination->map_attr == MAP_WALL || stairs_side) {
     if (play_wall_hit_sfx) {
       play_sound(sfx_wall_hit);
       play_wall_hit_sfx = false;
@@ -1854,9 +1903,12 @@ static void update_map_move(void) {
   map_state = MAP_STATE_WAITING;
   hero_state = HERO_STILL;
 
-  if (on_move())
-    return;
-
+  // Exit/special tiles go first: they get one specific arrival to fire on,
+  // so it can't be lost to a same-step encounter roll, which has other
+  // steps to land on instead. Neither dispatch consumes the step unless it
+  // actually reports doing something, so a tile whose exit/special check
+  // legitimately has nothing to do right now (an inactive portal combo, an
+  // already-used switch) still gets its usual encounter chance.
   MapTile *here = local_tiles + HERE;
 
   switch (here->map_attr) {
@@ -1870,6 +1922,9 @@ static void update_map_move(void) {
     break;
   default:
   }
+
+  if (on_move())
+    return;
 
   check_map_move();
 }
@@ -1987,7 +2042,9 @@ static bool check_chests(void) {
     str_maps_chest_open;
 
   if (used_key) {
-    char buf[96];
+    // map_textbox() keeps this pointer and draws the text after check_chests()
+    // returns, so the joined text needs storage that outlives the call.
+    static char buf[96];
 
     sprintf(buf, "%s\f%s", str_maps_chest_unlock_key, message);
     map_textbox(buf);
@@ -2141,12 +2198,16 @@ static void redraw_tile(uint8_t map_id, int8_t x, int8_t y) {
 
 void set_palette_at(uint8_t map_id, int8_t x, int8_t y, uint8_t palette) BANKED {
   TileOverrideHashEntry *entry = find_or_create_override_entry(map_id, x, y);
+  if (!entry)
+    return;
   entry->palette = palette;
   redraw_tile(map_id, x, y);
 }
 
 void set_tile_at(uint8_t map_id, int8_t x, int8_t y, uint8_t tile) BANKED {
   TileOverrideHashEntry *entry = find_or_create_override_entry(map_id, x, y);
+  if (!entry)
+    return;
   entry->tile = tile;
   redraw_tile(map_id, x, y);
 }
@@ -2324,6 +2385,7 @@ void set_active_floor(FloorBank *f) BANKED {
   active_map = &maps[0];
   set_hero_position(default_x, default_y);
   reset_map_objects();
+  on_load();
 }
 
 void remap_exit(
@@ -2394,7 +2456,12 @@ void return_from_death(void) NONBANKED {
   player.magic_keys = 0;
   player.got_magic_key = true;
 
+  // Same sequence as taking stairs to a new floor (see load_exit): run the
+  // floor's on_load now and its on_init on the first frame, so floor 1's
+  // encounter rate and one-shot encounter are reset instead of inheriting the
+  // floor the player died on.
   set_active_floor(&bank_floor1);
+  execute_on_init = true;
   initialize_world_map();
 
   map_fade_in(MAP_STATE_WAITING);
@@ -2538,7 +2605,7 @@ void update_world_map(void) NONBANKED {
   }
 }
 
-void draw_world_map(void) {
+void draw_world_map(void) NONBANKED {
   if (
     map_state == MAP_STATE_FADE_IN ||
     map_state == MAP_STATE_FADE_OUT ||

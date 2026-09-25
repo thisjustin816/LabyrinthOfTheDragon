@@ -279,6 +279,7 @@ addNamespace('floor_common', 2, {
   'fight_me': "Fight Me!",
   'love': "I LOVE YOU!",
   'strange_wind': "You feel a strong breeze from the north.",
+  'learned_all': "You've learned all it can teach.",
 })
 
 function grant_ability_str(name, cast=true) {
