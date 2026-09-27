@@ -11,8 +11,9 @@ permissions:
 
 jobs:
   # Every pull request and every push to main builds the ROM and attaches it to
-  # the run. A push to main is a release: it builds without the "+", takes the
-  # changelog lines it added as the notes, and the release job publishes it.
+  # the run, zipped under the ROM's name with the release notes and a PDF of the
+  # player's manual. A push to main is a release: it builds without the "+", and
+  # the release job publishes the ROM with those notes.
   build:
     runs-on: ubuntu-latest
     outputs:
@@ -45,15 +46,19 @@ jobs:
           fi
 
       - name: Write the release notes
-        if: github.event_name == 'push'
         env:
-          BEFORE: ${{ github.event.before }}
+          # The notes are the changelog lines the change adds, so on a pull
+          # request they preview what its merge would publish.
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           mkdir -p "$RUNNER_TEMP/out"
-          base="$BEFORE"
+          base="$BASE"
           # A push that creates the branch has no earlier commit to compare with.
           git cat-file -e "$base^{commit}" 2>/dev/null || base=HEAD^
-          ./tools/changelog2notes "$base" > "$RUNNER_TEMP/out/notes.md"
+          ./tools/changelog2notes "$base" > "$RUNNER_TEMP/out/release-notes.md"
+          if [ ! -s "$RUNNER_TEMP/out/release-notes.md" ]; then
+            echo "::notice::CHANGELOG.md gained no lines, so the release notes will be GitHub's list of merged pull requests."
+          fi
 
       - name: Install GBDK-2020
         run: |
@@ -78,9 +83,17 @@ jobs:
           mkdir -p "$RUNNER_TEMP/out"
           cp LabyrinthOfTheDragon.gbc "$RUNNER_TEMP/out/LabyrinthOfTheDragon-$version.gbc"
 
+      - name: Print the manual
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet markdown==3.10.3
+          "$RUNNER_TEMP/venv/bin/python" tools/docs/render_manual.py \
+            "$RUNNER_TEMP/out/LabyrinthOfTheDragon-manual.pdf" \
+            --links "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$(git rev-parse HEAD)/docs"
+
       - uses: actions/upload-artifact@v7
         with:
-          name: rom
+          name: LabyrinthOfTheDragon-${{ steps.build.outputs.version }}
           path: ${{ runner.temp }}/out/
           if-no-files-found: error
 
@@ -95,7 +108,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: rom
+          name: LabyrinthOfTheDragon-${{ needs.build.outputs.version }}
           path: out
 
       - name: Publish the release
@@ -105,7 +118,7 @@ jobs:
         run: |
           # GitHub's list of merged pull requests stands in when the push added
           # no changelog lines.
-          if [ -s out/notes.md ]; then notes=(--notes-file out/notes.md); else notes=(--generate-notes); fi
+          if [ -s out/release-notes.md ]; then notes=(--notes-file out/release-notes.md); else notes=(--generate-notes); fi
           gh release create "$VERSION" "out/LabyrinthOfTheDragon-$VERSION.gbc" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \

@@ -40,18 +40,24 @@ The changelog's latest heading and the credits card's `fork` line in
 `1.1 FORK`, so change them along with the `Makefile`.
 
 The build workflow, `.github/workflows/build.yml`, builds the ROM with
-GBDK-2020 4.5.0 for every pull request and attaches it to the run. A pull
-request builds its own head commit rather than GitHub's merge preview, so its
-number matches a local build. The workflow stops if the `Makefile`, the
-changelog, and the credits card disagree. Every push to main is a release: it
-builds with `make RELEASE=1` and publishes the ROM as a GitHub release tagged
-with its version. Its notes are the lines that push added to `CHANGELOG.md`,
-under their section headings, which `tools/changelog2notes` prints for any
-earlier commit. When it added none, GitHub's list of merged pull requests
-stands in. So a pull request adds its own bullets under the current heading.
-Merge pull requests with a merge commit, not a squash. A squash replaces a
-branch's commits with one, so the release after it could number below the
-branch's own test builds.
+GBDK-2020 4.5.0 for every pull request and every push to main. A pull request
+builds its own head commit rather than GitHub's merge preview, so its number
+matches a local build. The workflow stops if the `Makefile`, the changelog, and
+the credits card disagree. Each run attaches a zip named after the ROM, such as
+`LabyrinthOfTheDragon-v1.1.4+.zip`, that holds the ROM, the release notes in
+`release-notes.md`, and a PDF of the player's manual, which
+`tools/docs/render_manual.py` prints with headless Chrome.
+
+Every push to main is a release: it builds with `make RELEASE=1` and publishes
+the ROM as a GitHub release tagged with its version. Its notes are the lines
+that push added to `CHANGELOG.md`, under their section headings, which
+`tools/changelog2notes` prints for any earlier commit. When it added none,
+GitHub's list of merged pull requests stands in. So a pull request adds its own
+bullets under the current heading. Its zip's `release-notes.md` previews the
+notes its merge would publish, and is empty when the merge would fall back to
+GitHub's list. Merge pull requests with a merge commit, not a squash. A squash
+replaces a branch's commits with one, so the release after it could number
+below the branch's own test builds.
 
 ## Starting on a Later Floor
 
