@@ -113,6 +113,12 @@ static void text_writer_update(void) {
       return;
     default:
       if (text_writer.col == text_writer.width) {
+        // The line is full. Wrap, and reprocess this character on the next
+        // line instead of dropping it (a leading space is dropped on purpose).
+        // Pre-wrapped strings rarely hit this, but %s/%u expansions can run a
+        // line past its planned width.
+        if (next != ' ')
+          text_writer.text--;
         new_line();
         return;
       }

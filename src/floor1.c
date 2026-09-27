@@ -13,6 +13,13 @@
 
 bool special_encounter = true;
 
+// The stairs to floor 2 are one-way (there's no route back down once the
+// player takes them); warn before that first step onto them, the way the
+// unused sign in floor 2's original layout tried to. Reset on_load so a
+// death-and-replay warns again.
+bool warned_no_return = false;
+bool new_game_intro = false;
+
 //------------------------------------------------------------------------------
 // Maps
 //------------------------------------------------------------------------------
@@ -55,7 +62,7 @@ static const Chest chests[] = {
   {
     CHEST_3,
     MAP_A, 21, 10, false, false,
-    str_chest_item_1pots,
+    str_chest_item_1pot,
     chest_item_1pot,
   },
   {
@@ -203,7 +210,7 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 
 static bool boss_cleanup(void) {
@@ -222,6 +229,7 @@ static bool boss_encounter(void) {
   reset_encounter(MONSTER_LAYOUT_1);
   goblin_generator(monster, 10, S_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(boss_victory);
   start_battle();
   return true;
@@ -231,7 +239,7 @@ static bool on_npc_action(const NPC *npc) {
   if (npc->id != NPC_1)
     return false;
 
-  if (player.level < 10) {
+  if (player.level < 8) {
     map_textbox(str_maps_boss_not_yet);
     return true;
   }
@@ -310,6 +318,11 @@ static const EncounterTable encounter_lv9[] = {
 
 static bool on_init(void) {
   config_random_encounter(7, 1, 1, true);
+  if (new_game_intro) {
+    new_game_intro = false;
+    map_textbox(str_floor1_intro);
+    return true;
+  }
   return false;
 }
 
@@ -333,6 +346,16 @@ static bool on_special(void) {
 }
 
 static bool on_move(void) {
+  if (
+    player_at(12, 4) &&
+    is_door_open(DOOR_3) &&
+    !warned_no_return
+  ) {
+    warned_no_return = true;
+    map_textbox(str_floor_common_no_return);
+    return true;
+  }
+
   if (!check_random_encounter())
     return false;
 
@@ -351,6 +374,7 @@ static bool on_action(void) {
 
 static void on_load(void) {
   special_encounter = true;
+  warned_no_return = false;
 }
 
 //------------------------------------------------------------------------------

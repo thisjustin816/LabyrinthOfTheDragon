@@ -21,6 +21,11 @@
 #define SFX_MAGIC battle_sfx = sfx_monster_attack2
 
 /**
+ * Plays the "fire" sound during battle: the title screen's dragon fire.
+ */
+#define SFX_FIRE battle_sfx = sfx_title_fire
+
+/**
  * Plays the "action failed" sound during battle.
  */
 #define SFX_FAIL battle_sfx = sfx_monster_fail
@@ -51,7 +56,7 @@
 #define SFX_BIG_POWERUP battle_sfx = sfx_big_powerup
 
 /**
- * Plays the "big powerup" sound during battle.
+ * Plays the "mid powerup" sound during battle.
  */
 #define SFX_MID_POWERUP battle_sfx = sfx_mid_powerup
 
@@ -63,17 +68,34 @@
 /**
  * Plays the "monk strike" sound during battle.
  */
-#define SFX_MONK_STRIKE battle_sfx = sfx_monk_strike;
+#define SFX_MONK_STRIKE battle_sfx = sfx_monk_strike
 
 /**
  * Plays the "monk evade" sound during battle.
  */
-#define SFX_EVADE battle_sfx = sfx_evade;
+#define SFX_EVADE battle_sfx = sfx_evade
 
 /**
  * Plays the "magic missile" sound during battle.
  */
-#define SFX_MAGIC_MISSILE battle_sfx = sfx_magic_missile;
+#define SFX_MAGIC_MISSILE battle_sfx = sfx_magic_missile
+
+/**
+ * Plays the fighter's "melee attack" sound during battle.
+ */
+#define SFX_MELEE_ATTACK battle_sfx = sfx_melee_attack
+
+/**
+ * Plays the "action surge" sound during battle.
+ */
+#define SFX_ACTION_SURGE battle_sfx = sfx_action_surge
+
+/**
+ * Plays a themed hit's own sound over the one damage_player() picked, unless
+ * that was the critical hit sound, which a critical keeps.
+ */
+#define UNLESS_CRITICAL(sfx) \
+  do { if (battle_sfx != sfx_monster_critical) sfx; } while (0)
 
 /**
  * Sets the flag to skip the post action message in the battle system.

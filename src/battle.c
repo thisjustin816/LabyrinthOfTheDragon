@@ -9,7 +9,6 @@
 
 #include "battle.h"
 #include "core.h"
-#include "credits.h"
 #include "encounter.h"
 #include "map.h"
 #include "monster.h"
@@ -47,6 +46,15 @@ bool player_died = false;
 static Timer cursor_timer;
 
 /**
+ * The directions held since before the current menu opened. A hold like that
+ * was meant for something else, such as walking into the fight or moving the
+ * last menu's cursor, so it does not move this menu's cursor until it is
+ * released and pressed again. Each direction clears on its own release, so a
+ * thumb rolling onto a new direction moves the cursor as a fresh hold does.
+ */
+static uint8_t dpad_held_over = 0;
+
+/**
  * Handles D-Pad input for battle menus. Allows the player to hold a direction
  * and have the cursor continue to move until they let go.
  * @param button Button to check.
@@ -56,6 +64,8 @@ inline bool on_dpad(uint8_t button) {
     init_timer(cursor_timer, 20);
     return true;
   } else if (is_down(button)) {
+    if (dpad_held_over & button)
+      return false;
     if (!update_timer(cursor_timer))
       return false;
     init_timer(cursor_timer, 9);
@@ -86,7 +96,7 @@ static bool is_screen_shaking = false;
 
 /**
  * Finds the monster currently selected by the screen cursor.
- * @return Monster intance for the selected monster.
+ * @return Monster instance for the selected monster.
  */
 static Monster *get_monster_at_cursor(void) {
   uint8_t monster_idx = 0;
@@ -110,6 +120,7 @@ static Monster *get_monster_at_cursor(void) {
  */
 static void confirm_fight(void) {
   play_sound(sfx_menu_move);
+  battle_menu.last_target = battle_menu.screen_cursor;
   set_player_fight(get_monster_at_cursor());
   battle_state = BATTLE_ROLL_INITIATIVE;
 }
@@ -120,9 +131,10 @@ static void confirm_fight(void) {
  */
 static void confirm_ability(const Ability *ability) {
   play_sound(sfx_menu_move);
-  if (ability->target_type == TARGET_SINGLE)
+  if (ability->target_type == TARGET_SINGLE) {
+    battle_menu.last_target = battle_menu.screen_cursor;
     set_player_ability(ability, get_monster_at_cursor());
-  else
+  } else
     set_player_ability(ability, NULL);
   battle_state = BATTLE_ROLL_INITIATIVE;
 }
@@ -233,7 +245,7 @@ static void toggle_hp_bar_palette(MonsterPosition pos) {
 /**
  * Draws an HP bar for the monster at a given position.
  * @param pos Position of the monster on the battle screen.
- * @param hp Curent HP for the monster.
+ * @param hp Current HP for the monster.
  * @param max Max HP for the monster.
  */
 static void draw_hp_bar(MonsterPosition pos, uint16_t hp, uint16_t max) {
@@ -246,7 +258,7 @@ static void draw_hp_bar(MonsterPosition pos, uint16_t hp, uint16_t max) {
   // Calculate the number of pips based on the ratio of HP to Max HP
   uint32_t k = 40;
   k *= hp;
-  k /= max;
+  k /= max ? max : 1;
   uint8_t p = k;
 
   // Update the attributes based on HP percentage
@@ -658,6 +670,18 @@ static inline void draw_submenu_heading(void) {
 }
 
 /**
+ * Fills a submenu row with spaces. The rows are drawn with draw_text, which
+ * maps ' ' to FONT_SPACE; writing FONT_SPACE itself would be offset again into
+ * tile 0x20.
+ * @param row Row buffer, 18 characters and a terminator.
+ */
+static void blank_menu_row(char *row) {
+  for (uint8_t k = 0; k < 18; k++)
+    row[k] = ' ';
+  row[18] = 0;
+}
+
+/**
  * Pre renders entry text for the player's inventory into a buffer. This allows
  * the items to be quickly rendered when the submenu is opened.
  */
@@ -677,44 +701,20 @@ static void render_item_text(void) {
   battle_menu.inventory_entries = p;
 
   while (p < INVENTORY_LEN) {
-    for (uint8_t k = 0; k < 18; k++) {
-      battle_menu.item_text[p][k] = (char)FONT_SPACE;
-      battle_menu.item_at[p] = ITEM_INVALID;
-    }
+    blank_menu_row(battle_menu.item_text[p]);
+    battle_menu.item_at[p] = ITEM_INVALID;
     p++;
   }
 }
 
 /**
- * Re-renders the item at the current submenu cursor. Primarily used to redraw
- * item quantities when they are used.
+ * Points the open submenu at `entries` lines and moves the scroll ceiling with
+ * it. Does not touch the cursor or the current scroll position.
  */
-static void update_item_text_at_cursor(void) {
-  const char *format = " %s        x%2u";
-  const uint8_t cursor = battle_menu.cursor;
-  Item *item = inventory + battle_menu.item_at[cursor];
-  sprintf(battle_menu.item_text[cursor], format, item->name, item->quantity);
-}
-
-/**
- * Removes the text for the item at the cursor if the last one was used.
- */
-static void remove_item_text_at_cursor(void) {
-  const uint8_t cursor = battle_menu.cursor;
-  const uint8_t entries = battle_menu.inventory_entries - 1;
-
-  for (uint8_t c = 0; c < 18; c++) {
-    battle_menu.item_text[cursor][c] = (char)FONT_SPACE;
-    battle_menu.item_at[cursor] = ITEM_INVALID;
-  }
-
-  for (uint8_t k = cursor; k < entries; k++) {
-    battle_menu.item_at[k] = battle_menu.item_at[k + 1];
-    for (uint8_t c = 0; c < 18; c++)
-      battle_menu.item_text[k][c] = battle_menu.item_text[k + 1][c];
-  }
-
-  battle_menu.inventory_entries = entries;
+static void set_submenu_entries(uint8_t entries) {
+  battle_menu.entries = entries;
+  battle_menu.max_scroll =
+    entries <= SUBMENU_ROWS ? 0 : entries - SUBMENU_ROWS;
 }
 
 /**
@@ -738,8 +738,7 @@ static void render_ability_text(void) {
   }
 
   while (a < MAX_ABILITIES) {
-    for (uint8_t k = 0; k < 18; k++)
-      battle_menu.ability_text[a][k] = (char)FONT_SPACE;
+    blank_menu_row(battle_menu.ability_text[a]);
     a++;
   }
 }
@@ -784,7 +783,8 @@ static void redraw_submenu_text(void) {
     return;
   }
 
-  const uint8_t max = battle_menu.entries < 4 ? battle_menu.entries : 4;
+  const uint8_t max =
+    battle_menu.entries < SUBMENU_ROWS ? battle_menu.entries : SUBMENU_ROWS;
   uint8_t *vram = VRAM_SUBMENU_TEXT;
 
   if (battle_menu.active_menu == BATTLE_MENU_ABILITY) {
@@ -799,17 +799,17 @@ static void redraw_submenu_text(void) {
     }
   }
 
-  if (max >= 4)
+  if (max >= SUBMENU_ROWS)
     return;
 
-  for (uint8_t j = 0; j < 4 - max; j++, vram += 32 - 18) {
+  for (uint8_t j = 0; j < SUBMENU_ROWS - max; j++, vram += 32 - 18) {
     for (uint8_t x = 0; x < 18; x++, vram++)
       set_vram_byte(vram, FONT_SPACE);
   }
 }
 
 /**
- * Initalizes a submenu for the given entry lines and number of entries.
+ * Initializes a submenu for the given entry lines and number of entries.
  * @param lines Line buffers to draw.
  * @param entries Total number of entries for the battle_menu.
  */
@@ -826,10 +826,9 @@ static void load_submenu(BattleMenuType menu) {
     battle_menu.inventory_entries;
 
   battle_menu.active_menu = menu;
-  battle_menu.entries = entries;
+  set_submenu_entries(entries);
   battle_menu.cursor = 0;
   battle_menu.scroll = 0;
-  battle_menu.max_scroll = entries <= 4 ? 0 : entries - 4;
 
   draw_submenu_heading();
   draw_submenu_scroll_arrows();
@@ -837,7 +836,7 @@ static void load_submenu(BattleMenuType menu) {
   if (battle_menu.entries == 0) {
     hide_cursor();
     uint8_t *vram = VRAM_BACKGROUND_XY(SUBMENU_TEXT_X, SUBMENU_TEXT_Y);
-    for (uint8_t y = 0; y < 4; y++) {
+    for (uint8_t y = 0; y < SUBMENU_ROWS; y++) {
       for (uint8_t x = 0; x < 18; x++)
         set_vram_byte(vram++, FONT_SPACE);
       vram += 14;
@@ -864,10 +863,10 @@ static void submenu_cursor_up(void) {
     if (battle_menu.entries == 1)
       return;
     battle_menu.cursor = battle_menu.entries - 1;
-    if (battle_menu.entries <= 4)
+    if (battle_menu.entries <= SUBMENU_ROWS)
       move_screen_cursor(BATTLE_CURSOR_ITEM_1 + battle_menu.cursor);
     else {
-      battle_menu.scroll = battle_menu.entries - 4;
+      battle_menu.scroll = battle_menu.entries - SUBMENU_ROWS;
       move_screen_cursor(BATTLE_CURSOR_ITEM_4);
     }
     redraw_submenu_text();
@@ -932,6 +931,7 @@ static void submenu_cursor_down(void) {
 static void open_battle_menu(BattleMenuType m) {
   uint8_t prev_menu = battle_menu.active_menu;
   battle_menu.active_menu = m;
+  dpad_held_over = is_down(J_DPAD);
   switch (m) {
   case BATTLE_MENU_MAIN:
     switch (prev_menu) {
@@ -947,6 +947,12 @@ static void open_battle_menu(BattleMenuType m) {
     break;
   case BATTLE_ABILITY_MONSTER_SELECT:
   case BATTLE_MENU_FIGHT:
+    // Aim at the last target again while it stands, or else the first
+    // monster that does.
+    if (get_monster(battle_menu.last_target - BATTLE_CURSOR_MONSTER_1)->active) {
+      move_screen_cursor(battle_menu.last_target);
+      return;
+    }
     Monster *monster = encounter.monsters;
     for (uint8_t pos = 0; pos < 3; pos++, monster++) {
       if (monster->active) {
@@ -1012,6 +1018,8 @@ static void main_menu_cursor_commit(void) {
  * @see `update_battle`
  */
 static inline void update_battle_menu(void) {
+  dpad_held_over &= joypad_down;
+
   switch (battle_menu.active_menu) {
   case BATTLE_MENU_MAIN:
     if (was_pressed(J_A))
@@ -1034,6 +1042,7 @@ static inline void update_battle_menu(void) {
   case BATTLE_ABILITY_MONSTER_SELECT:
     if (was_pressed(J_B)) {
       battle_menu.active_menu = BATTLE_MENU_ABILITY;
+      dpad_held_over = is_down(J_DPAD);
       move_screen_cursor(battle_menu.last_ability_cursor);
     } else if (was_pressed(J_A))
       confirm_ability(battle_menu.active_ability);
@@ -1073,15 +1082,16 @@ static inline void update_battle_menu(void) {
     else if (was_pressed(J_A)) {
       ItemId item_id = battle_menu.item_at[battle_menu.cursor];
 
-      if (!can_use_item(item_id)) {
+      // An empty submenu has no item under the cursor, so those checks come
+      // first: can_use_item() would index the inventory with ITEM_INVALID.
+      if (
+        battle_menu.entries == 0 ||
+        item_id == ITEM_INVALID ||
+        !can_use_item(item_id)
+      ) {
         play_sound(sfx_error);
         break;
       }
-
-      if (!remove_item(item_id))
-        remove_item_text_at_cursor();
-      else
-        update_item_text_at_cursor();
 
       confirm_item(item_id);
     }
@@ -1285,8 +1295,13 @@ static void clear_inactive_monsters(void) {
  * LCY interrupt handler for the fight and skill menus. This handler changes the
  * scroll-y position at a specific scanline to display a different part of the
  * background that contains the graphics for these menus.
+ *
+ * NONBANKED: interrupt handlers are entered with whatever ROM bank happens to
+ * be paged in. Battle mostly runs from bank 3, but monster turns, stat lookups
+ * and sound page in other banks, and an LYC interrupt landing then would have
+ * executed that bank's bytes at this address.
  */
-static void fight_menu_isr(void) {
+static void fight_menu_isr(void) NONBANKED {
   SCY_REG = 0;
   if (
     battle_state == BATTLE_STATE_MENU &&
@@ -1338,6 +1353,8 @@ void initialize_battle(void) {
   }
   move_screen_cursor_no_sound(BATTLE_CURSOR_MAIN_FIGHT);
   battle_menu.active_menu = BATTLE_MENU_MAIN;
+  battle_menu.last_target = BATTLE_CURSOR_MONSTER_1;
+  dpad_held_over = is_down(J_DPAD);
 
   // Initialize the encounter and player graphics
   battle_init_encounter();
@@ -1450,6 +1467,13 @@ void update_battle(void) NONBANKED {
     break;
   case BATTLE_TAKE_ACTION:
     take_action();
+    // An item leaves the inventory on the player's own turn (use_item()), so
+    // the prerendered item rows are rebuilt once that turn has run.
+    if (
+      encounter.turn == TURN_PLAYER &&
+      encounter.player_action == PLAYER_ACTION_ITEM
+    )
+      render_item_text();
     text_writer.print(battle_pre_message);
     animation_state = ANIMATION_PREAMBLE;
     if (skip_post_message)
@@ -1483,6 +1507,7 @@ void update_battle(void) NONBANKED {
   case BATTLE_END_ROUND:
     battle_state = BATTLE_STATE_MENU;
     battle_menu.active_menu = BATTLE_MENU_MAIN;
+    dpad_held_over = is_down(J_DPAD);
     update_player_mp();
     hide_battle_text();
     play_sound(sfx_next_round);
@@ -1530,11 +1555,18 @@ void draw_battle(void) NONBANKED {
       cleanup_isr();
       battle_state = BATTLE_INACTIVE;
 
+      // What a fight gave the player lasts only that fight: Still Mind's
+      // immunity, Diamond Body's resistances, being prone, and the special
+      // flags. The save stores the player whole, so clear them however the
+      // fight ends, not only when the next one starts.
+      player.debuff_immune = 0;
+      player.aspect_resist = 0;
+      player.trip_turns = 0;
+      reset_special();
+
       if (player_died) {
         player_died = false;
         return_from_death();
-      } else if (encounter.is_final_boss) {
-        init_credits();
       } else {
         return_from_battle();
       }

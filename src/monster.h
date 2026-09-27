@@ -122,7 +122,7 @@ typedef struct Monster {
    */
   uint8_t matk_base;
   /**
-   * Current magical attack. Calculed via status effects, etc.
+   * Current magical attack. Calculated via status effects, etc.
    */
   uint8_t matk;
   /**
@@ -157,8 +157,8 @@ typedef struct Monster {
    */
   uint8_t aspect_vuln;
   /**
-   * Debuff immunity.
-   * @see `StatusEffectImmunity`
+   * Debuff immunity. Each bit corresponds to a different debuff.
+   * @see `DebuffFlag`
    */
   uint8_t debuff_immune;
   /**
@@ -174,7 +174,9 @@ typedef struct Monster {
    */
   uint8_t buffs;
   /**
-   * Whether or not the monster can flee (set this for elites, bosses, etc.).
+   * Whether or not the monster can flee. Bosses, elites, and floor 8's gauntlet
+   * fights clear it: a fight is won once every monster is gone, so one that
+   * ran would open its door as if beaten.
    */
   bool can_flee;
   /**
@@ -340,9 +342,9 @@ void dragon_generator(
   Monster *m, uint8_t level, PowerTier tier) BANKED;
 
 /**
- * Handle the "flee" action for a monster.
+ * Handles the "flee" action for a monster and marks it fled if it gets away. A
+ * monster that can't flee always fails.
  * @param monster Monster who is trying to flee.
- * @return Whether or not the monster could flee.
  */
 void monster_flee(Monster *monster) BANKED;
 
@@ -352,8 +354,11 @@ void monster_flee(Monster *monster) BANKED;
 void monster_take_turn(Monster *monster) NONBANKED;
 
 /**
- * Applies damage to the player.
- * @param base_damage Base damage for the attck.
+ * Applies damage to the player and writes the result line. Picks the hit,
+ * critical, or evade sound, and returns 0 on a dodge, an immunity, or a hit
+ * halved to nothing. A caller may replace the line and the sound on a landed
+ * hit, as the themed attacks do, but must leave a dodge's line and sound alone.
+ * @param base_damage Base damage for the attack.
  * @param type Type of damage dealt.
  */
 uint16_t damage_player(uint16_t base_damage, DamageAspect type) BANKED;

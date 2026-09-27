@@ -50,8 +50,8 @@ static const Chest chests[] = {
   { CHEST_6, MAP_A, 28, 4, true, true, str_chest_item_3ethers, chest_item_3ethers },
 
   // Secret Boss Room
-  { CHEST_7, MAP_B, 11, 3, false, false, str_chest_item_1pots, chest_item_1pot },
-  { CHEST_8, MAP_B, 13, 3, false, false, str_chest_item_1eths, chest_item_1eth },
+  { CHEST_7, MAP_B, 11, 3, false, false, str_chest_item_1pot, chest_item_1pot },
+  { CHEST_8, MAP_B, 13, 3, false, false, str_chest_item_1eth, chest_item_1eth },
 
   // Treasure Room Chests
   { END },
@@ -176,11 +176,15 @@ static void on_pulled(const Lever *lever) {
     return;
   }
 
-  if (lever->id == LEVER_3 || lever->id == LEVER_4) {
-    if (is_door_open(DOOR_3) && is_door_open(DOOR_4)) {
-      open_door(DOOR_1);
-      map_textbox(str_floor2_door_opens);
-    }
+  // Both wings' levers have to be thrown before the boss door opens, and only
+  // one wing holds anything else worth the detour. A player who skips the
+  // other wing has made a reasonable call, and without this the lever they did
+  // pull says nothing and the boss door stays shut with no hint why.
+  if (is_door_open(DOOR_3) && is_door_open(DOOR_4)) {
+    open_door(DOOR_1);
+    map_textbox(str_floor2_door_opens);
+  } else {
+    map_textbox(str_floor_common_another_lever);
   }
 }
 
@@ -261,7 +265,7 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 
 static void on_boss_victory(void) BANKED {
@@ -272,25 +276,25 @@ static void on_boss_victory(void) BANKED {
 
 static void on_elite_victory(void) BANKED {
   set_npc_invisible(NPC_2);
-  grant_ability(ABILITY_5);
-  play_sound(sfx_big_powerup);
-  map_textbox(get_grant_message(ABILITY_5));
+  teach_elite_ability(ABILITY_5);
 }
-static bool on_boss_encouter(void) {
+static bool on_boss_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   mindflayer_generator(monster, 45, A_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_boss_victory);
   start_battle();
   return true;
 }
 
-static bool on_elite_encouter(void) {
+static bool on_elite_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   will_o_wisp_generator(monster, 43, B_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_elite_victory);
   start_battle();
   return true;
@@ -300,16 +304,16 @@ static bool on_elite_encouter(void) {
 static bool on_npc_action(const NPC *npc) {
   switch (npc->id) {
   case NPC_1:
-    if (player.level < 45) {
+    if (player.level < 34) {
       map_textbox(str_floor6_boss_not_yet);
       return true;
     }
     play_sound(sfx_monster_attack2);
-    map_textbox_with_action(str_floor6_boss, on_boss_encouter);
+    map_textbox_with_action(str_floor6_boss, on_boss_encounter);
     return true;
   case NPC_2:
     play_sound(sfx_monster_attack1);
-    map_textbox_with_action(str_floor6_elite_attack, on_elite_encouter);
+    map_textbox_with_action(str_floor6_elite_attack, on_elite_encounter);
     return true;
   }
   return false;
@@ -435,24 +439,28 @@ static bool on_special(void) {
     if (player_at(1, 2)) {
       play_sound(sfx_no_no_square);
       teleport(MAP_A, 2, 21, UP, EXIT_PORTAL);
+      return true;
     }
     break;
   case 1:
     if (player_at(3, 2)) {
       play_sound(sfx_no_no_square);
       teleport(MAP_A, 26, 21, UP, EXIT_PORTAL);
+      return true;
     }
     break;
   case 2:
     if (player_at(13, 2)) {
       play_sound(sfx_no_no_square);
       teleport(MAP_A, 22, 29, LEFT, EXIT_PORTAL);
+      return true;
     }
     break;
   case 3:
     if (player_at(15, 2)) {
       play_sound(sfx_no_no_square);
       teleport(MAP_A, 12, 21, UP, EXIT_PORTAL);
+      return true;
     }
     break;
   }

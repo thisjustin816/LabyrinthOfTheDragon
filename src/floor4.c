@@ -43,14 +43,14 @@ static const Chest chests[] = {
   {
     CHEST_1,
     MAP_A, 12, 28, false, false,
-    str_chest_item_1pots,
+    str_chest_item_1pot,
     chest_item_1pot,
   },
   // Secret 2
   {
     CHEST_2,
     MAP_A, 3, 28, false, false,
-    str_chest_item_1eths,
+    str_chest_item_1eth,
     chest_item_1eth,
   },
   // West Wing Chest
@@ -127,7 +127,6 @@ static const Exit exits[] = {
   { MAP_A, 19, 5, MAP_A, 19, 8, DOWN, EXIT_STAIRS },
 
   // Floor Exit
-  // TODO Map this to floor 5
   { MAP_A, 28, 19, MAP_A, 12, 30, UP, EXIT_STAIRS, &bank_floor5 },
 
   { END },
@@ -146,6 +145,18 @@ static const Sign signs[] = {
     "Hi there!" // The message to display
   }
   */
+
+  // Sits between the three colored sconces and DOOR_1, so it is read at the
+  // moment the question comes up: the player tries the door, finds it shut,
+  // and turns one tile to the hint. Each puzzle room shows three icons in the
+  // row above, but only two sconces beneath them: the third sits over an empty
+  // alcove. That icon is the only one drawn in color, and its color is what
+  // both sconces in the room must burn -- green in the west room, red in the
+  // central, blue in the east. The sign only sends the player to look there,
+  // since the floor answers itself once they know where to look. Keep it to
+  // one textbox: a hint that runs to a second box is a hint people skip.
+  { MAP_A, 27, 27, UP, str_floor4_sign_flames },
+
   { END },
 };
 
@@ -317,7 +328,7 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 
 static void on_boss_victory(void) BANKED {
@@ -328,26 +339,26 @@ static void on_boss_victory(void) BANKED {
 
 static void on_elite_victory(void) BANKED {
   set_npc_invisible(NPC_2);
-  grant_ability(ABILITY_3);
-  play_sound(sfx_big_powerup);
-  map_textbox(get_grant_message(ABILITY_3));
+  teach_elite_ability(ABILITY_3);
 }
 
-static bool on_boss_encouter(void) {
+static bool on_boss_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   displacer_beast_generator(monster, 31, A_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_boss_victory);
   start_battle();
   return true;
 }
 
-static bool on_elite_encouter(void) {
+static bool on_elite_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   owlbear_generator(monster, 29, B_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_elite_victory);
   start_battle();
   return true;
@@ -356,16 +367,16 @@ static bool on_elite_encouter(void) {
 static bool on_npc_action(const NPC *npc) {
   switch (npc->id) {
   case NPC_1:
-    if (player.level < 29) {
+    if (player.level < 24) {
       map_textbox(str_floor4_boss_not_yet);
       return true;
     }
     play_sound(sfx_monster_attack2);
-    map_textbox_with_action(str_floor4_boss, on_boss_encouter);
+    map_textbox_with_action(str_floor4_boss, on_boss_encounter);
     return true;
   case NPC_2:
     play_sound(sfx_monster_attack1);
-    map_textbox_with_action(str_floor4_elite_attack, on_elite_encouter);
+    map_textbox_with_action(str_floor4_elite_attack, on_elite_encounter);
     return true;
   }
   return false;

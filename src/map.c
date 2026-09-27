@@ -10,9 +10,13 @@
 
 #include "battle.h"
 #include "core.h"
+#include "credits.h"
 #include "floor.h"
+#include "main_menu.h"
 #include "map.h"
+#include "save.h"
 #include "sound.h"
+#include "title_screen.h"
 
 Exit active_exit;
 MapState map_state;
@@ -52,7 +56,7 @@ uint8_t move_step;
 int8_t vram_x;
 
 /**
- * Curren VRAM progressive load origin y-position.
+ * Current VRAM progressive load origin y-position.
  */
 int8_t vram_y;
 
@@ -67,7 +71,7 @@ uint8_t buffer_pos;
 uint8_t buffer_max;
 
 /**
- * VRAM start colum to use during a progressive load.
+ * VRAM start column to use during a progressive load.
  */
 int8_t vram_col;
 
@@ -122,11 +126,6 @@ Timer flame_timer;
  * The current flame sprite frame.
  */
 uint8_t flame_frame;
-
-/**
- * Timer used to slowly reduce the amount of torch guage remaining.
- */
-Timer torch_timer;
 
 /**
  * Whether or not the BG priority was set for the destination during a move.
@@ -191,9 +190,11 @@ static Timer battle_wait_timer;
 bool init_random = true;
 
 /**
- * Current random initialization seed.
+ * A running count of frames since power-on, taken on the screens before play
+ * (when main.c's RANDOM_SEED is 0) and on each map until its first move,
+ * which seeds the dice.
  */
-static uint16_t new_seed = 1;
+uint16_t new_seed = 1;
 
 /**
  * Holds the color of the flames for the sconces in the current floor.
@@ -207,6 +208,12 @@ FlameColor sconce_colors[8] = {
  * Bank for the current floor.
  */
 static FloorBank *floor_bank;
+
+/**
+ * Set by `map_restore_state`, consumed by the `on_init` trampoline: the floor's
+ * `on_init` resets its script globals, so saved values go in after it runs.
+ */
+static bool pending_save_restore = false;
 
 /**
  * Maps for the current floor.
@@ -285,8 +292,16 @@ static void list_copy(
       *dest++ = *source++;
       len--;
     }
-    if (record_id == END) break;
+    if (record_id == END) return;
   }
+  // The source had more than `max - 1` records: the list was copied without
+  // its terminator. Turn the last slot into one so that every loop over the
+  // destination still stops inside the array. The whole record is cleared
+  // first so that an id wider than a byte, like a door's, reads as END too.
+  uint8_t *last = dest - item_len;
+  for (size_t k = 0; k < item_len; k++)
+    last[k] = 0;
+  *last = END;
 }
 
 /**
@@ -335,6 +350,14 @@ static bool on_init(void) NONBANKED {
   SWITCH_ROM(floor_bank->bank);
   value = floor_bank->floor->on_init();
   SWITCH_ROM(_prev_bank);
+
+  // Loading a save: the floor has just reset its puzzle counters, so now is
+  // the moment to put the saved ones back.
+  if (pending_save_restore) {
+    pending_save_restore = false;
+    save_apply_deferred();
+  }
+
   return value;
 }
 
@@ -398,6 +421,13 @@ static void on_draw(void) NONBANKED {
 
 /**
  * Calls the `on_open` callback for a chest.
+ *
+ * Unlike on_pull, on_lit, and on_npc_action, this does not switch to
+ * floor_bank->bank first: check_action() runs this from update_map() while
+ * bank 2 (this file's own bank) is paged in, and every chest's `on_open`
+ * lives in floor_common.c, which is also bank 2. A callback defined in a
+ * floorN.c file instead, like every other object callback, would call
+ * whatever bytes sit at that address in bank 2 instead of its own.
  */
 static bool on_open(const Chest *chest) NONBANKED {
   return chest->on_open(chest);
@@ -452,7 +482,8 @@ uint8_t get_sconce_index(SconceId sconce_id) NONBANKED {
   if (sconce_id == SCONCE_4) return 3;
   if (sconce_id == SCONCE_5) return 4;
   if (sconce_id == SCONCE_6) return 5;
-  return 6;
+  if (sconce_id == SCONCE_7) return 6;
+  return 7;
 }
 
 /**
@@ -485,7 +516,11 @@ static void hash_object(
 ) {
   uint8_t hash_idx = hash(map_id, x, y);
   TileHashEntry *entry = tile_object_hashtable + hash_idx;
+  uint8_t probes = TILE_HASHTABLE_SIZE;
   while (entry->data) {
+    // Table full: drop the object rather than probe forever.
+    if (--probes == 0)
+      return;
     hash_idx = (hash_idx + 1) & (TILE_HASHTABLE_SIZE - 1);
     entry = tile_object_hashtable + hash_idx;
   }
@@ -498,7 +533,10 @@ static void hash_object(
 }
 
 /**
- * TODO document me
+ * Looks up the tile override entry for a coordinate on the active map.
+ * @param x Column of the tile.
+ * @param y Row of the tile.
+ * @return The entry, or NULL if the tile has no override.
  */
 static TileOverrideHashEntry *find_override_entry(
   int8_t x,
@@ -508,10 +546,13 @@ static TileOverrideHashEntry *find_override_entry(
   uint8_t hash_idx = hash(map_id, x, y);
 
   TileOverrideHashEntry *entry = tile_override_hashtable + hash_idx;
+  uint8_t probes = TILE_HASHTABLE_SIZE;
   while (entry->map_id != 0xFF) {
     if (entry->map_id == map_id && entry->x == x && entry->y == y)
       return entry;
 
+    if (--probes == 0)
+      break;
     hash_idx = (hash_idx + 1) & (TILE_HASHTABLE_SIZE - 1);
     entry = tile_override_hashtable + hash_idx;
   }
@@ -520,17 +561,20 @@ static TileOverrideHashEntry *find_override_entry(
 }
 
 /**
- * TODO document me
+ * Finds the tile override entry for a map coordinate, creating one if the tile
+ * has none yet. Entries live in a 64-slot open-addressing table keyed by
+ * hash(map_id, x, y) with linear probing; the whole table is reset (every
+ * field 0xFF) when a floor loads and entries are never removed, so a slot that
+ * reads as free still holds the "no override" values for tile and palette.
  *
- * NOTE: There is a very weird bug with collisions going on when rewriting tiles
- *       and palettes. Turns out hashing (0,7,29) OR (0,9,26) OR (0,9,29) all
- *       hash to 58.
+ * Colliding coordinates are handled by the probing: floor 8's healing mirrors
+ * at (11,21) and (19,9) both hash to slot 2 and repaint only their own tiles,
+ * including across a save and reload.
  *
- *       *SOMEHOW* the collsion is not bucketing correctly and it's causing an
- *       error where the tile for the wrong position gets overriden?
- *
- *       I am "fixing" this due to lack of time by shifting the tiles in level
- *       7's main floor so the collisions no longer take place. *sigh*
+ * @param map_id Map the tile is on.
+ * @param x Column of the tile.
+ * @param y Row of the tile.
+ * @return The entry, or NULL when the table is full.
  */
 static TileOverrideHashEntry *find_or_create_override_entry(
   uint8_t map_id,
@@ -539,11 +583,16 @@ static TileOverrideHashEntry *find_or_create_override_entry(
 ) {
   uint8_t hash_idx = hash(map_id, x, y);
   TileOverrideHashEntry *entry = tile_override_hashtable + hash_idx;
+  uint8_t probes = TILE_HASHTABLE_SIZE;
 
   while (entry->map_id != 0xFF) {
     // We've found the override entry for the given coordinates
     if (entry->map_id == map_id && entry->x == x && entry->y == y)
       return entry;
+
+    // Table full: nothing can be created.
+    if (--probes == 0)
+      return NULL;
 
     // Handle collisions
     hash_idx = (hash_idx + 1) & (TILE_HASHTABLE_SIZE - 1);
@@ -565,11 +614,14 @@ static TileHashEntry *get_hash_entry(int8_t x, int8_t y) {
   const uint8_t map_id = active_map->id;
   uint8_t hash_idx = hash(map_id, x, y);
   TileHashEntry *entry = tile_object_hashtable + hash_idx;
+  uint8_t probes = TILE_HASHTABLE_SIZE;
 
   while (entry->data) {
     if (entry->map_id == map_id && entry->x == x && entry->y == y)
       return entry;
 
+    if (--probes == 0)
+      break;
     hash_idx = (hash_idx + 1) & (TILE_HASHTABLE_SIZE - 1);
     entry = tile_object_hashtable + hash_idx;
   }
@@ -832,6 +884,37 @@ static void init_npcs(void) {
 }
 
 /**
+ * Positions and tiles the four sprites that make up a 16x16 NPC.
+ * @param sprite_root First of the NPC's four sprite ids.
+ * @param x Screen x for the top-left sprite.
+ * @param y Screen y for the top-left sprite.
+ * @param tile_root Tile for the top-left sprite; the others follow the 16-wide
+ *   layout of the monster tile pages.
+ */
+static void draw_npc(uint8_t sprite_root, uint8_t x, uint8_t y, uint8_t tile_root) {
+  move_sprite(sprite_root + 0, x, y);
+  move_sprite(sprite_root + 1, x + 8, y);
+  move_sprite(sprite_root + 2, x, y + 8);
+  move_sprite(sprite_root + 3, x + 8, y + 8);
+
+  set_sprite_tile(sprite_root, tile_root);
+  set_sprite_tile(sprite_root + 1, tile_root + 1);
+  set_sprite_tile(sprite_root + 2, tile_root + 0x10);
+  set_sprite_tile(sprite_root + 3, tile_root + 0x10 + 1);
+}
+
+/**
+ * Moves the four sprites of an NPC off screen.
+ * @param sprite_root First of the NPC's four sprite ids.
+ */
+static void hide_npc(uint8_t sprite_root) {
+  move_sprite(sprite_root + 0, 0, 0);
+  move_sprite(sprite_root + 1, 0, 0);
+  move_sprite(sprite_root + 2, 0, 0);
+  move_sprite(sprite_root + 3, 0, 0);
+}
+
+/**
  * Updates NPCs.
  */
 static void update_npcs(void) {
@@ -849,21 +932,23 @@ static void update_npcs(void) {
   ) {
     const uint8_t sprite_root = NPC_SPRITE_1 + 4 * pos;
 
-    *(debug + 1) = *(debug + 1) + 1;
+    // Tile offset of the NPC from the loaded window's origin. Maps are far
+    // smaller than 127 tiles across, so the 8-bit difference cannot wrap, and
+    // "on screen" is the single unsigned range check `-1 <= d < LOADS`.
+    const int8_t dx = npc->col - map_x;
+    const int8_t dy = npc->row - map_y;
 
     if (
       is_npc_visible(npc->id) &&
       npc->map_id == active_map->id &&
-      npc->col >= map_x - 1 &&
-      npc->col < map_x + MAP_HORIZ_LOADS &&
-      npc->row >= map_y - 1 &&
-      npc->row < map_y + MAP_VERT_LOADS
+      (uint8_t)(dx + 1) <= MAP_HORIZ_LOADS &&
+      (uint8_t)(dy + 1) <= MAP_VERT_LOADS
     ) {
       const uint8_t tile_root =
         NPC_1_TILE_ROOT + 0x20 * pos + npc_walk_frame;
 
-      uint8_t x = ((npc->col - map_x + 1) << 4) - 8;
-      uint8_t y = ((npc->row - map_y + 1) << 4);
+      uint8_t x = ((dx + 1) << 4) - 8;
+      uint8_t y = (dy + 1) << 4;
 
       if (map_state == MAP_STATE_MOVING) {
         switch (move_direction) {
@@ -882,21 +967,9 @@ static void update_npcs(void) {
         }
       }
 
-      move_sprite(sprite_root + 0, x, y);
-      move_sprite(sprite_root + 1, x + 8, y);
-      move_sprite(sprite_root + 2, x, y + 8);
-      move_sprite(sprite_root + 3, x + 8, y + 8);
-
-      set_sprite_tile(sprite_root, tile_root);
-      set_sprite_tile(sprite_root + 1, tile_root + 1);
-      set_sprite_tile(sprite_root + 2, tile_root + 0x10);
-      set_sprite_tile(sprite_root + 3, tile_root + 0x10 + 1);
-
+      draw_npc(sprite_root, x, y, tile_root);
     } else {
-      move_sprite(sprite_root + 0, 0, 0);
-      move_sprite(sprite_root + 1, 0, 0);
-      move_sprite(sprite_root + 2, 0, 0);
-      move_sprite(sprite_root + 3, 0, 0);
+      hide_npc(sprite_root);
     }
   }
 }
@@ -1002,6 +1075,11 @@ static void update_flames(void) {
 
   const Sconce *sconce;
   for (sconce = sconces; sconce->id != END; sconce++) {
+    // Flames use the last MAX_FLAME_SPRITES entries of OAM. A ninth would
+    // write past the end of the sprite table.
+    if (flame_id >= MAX_FLAME_SPRITES)
+      break;
+
     const uint8_t sprite_id = FLAME_SPRITE_ID0 + flame_id; //get_sconce_flame_sprite(sconce->id);
 
     if (
@@ -1060,14 +1138,35 @@ static void clear_flames(void) {
 }
 
 /**
+ * Positions the three magic key HUD sprites, or parks them off screen while
+ * the player has never found a key. The HUD's init and its per-frame update
+ * both place the sprites through this, so the two agree on the position.
+ */
+static void place_magic_key_hud(void) {
+  if (player.got_magic_key) {
+    // The casts only silence SDCC, which warns of an overflow when a folded
+    // constant above 127 reaches move_sprite()'s uint8_t parameters.
+    move_sprite(MAGIC_KEY_SPRITE_1, (uint8_t)MAGIC_KEYS_X, MAGIC_KEYS_Y);
+    move_sprite(MAGIC_KEY_SPRITE_2, (uint8_t)MAGIC_KEYS_X, MAGIC_KEYS_Y + 8);
+    move_sprite(MAGIC_KEY_QTY, (uint8_t)(MAGIC_KEYS_X + 9), MAGIC_KEYS_Y + 1);
+  } else {
+    move_sprite(MAGIC_KEY_SPRITE_1, 0, 0);
+    move_sprite(MAGIC_KEY_SPRITE_2, 0, 0);
+    move_sprite(MAGIC_KEY_QTY, 0, 0);
+  }
+}
+
+void reload_torch_gauge_palette(void) BANKED {
+  core.load_sprite_palette(
+    torch_gauge_palettes + player.torch_color * 4, TORCH_GAUGE_PALETTE, 1);
+}
+
+/**
  * Initializes the player hud (torch gauge, keys, floor, etc.).
  */
 static void init_hud(void) {
-  const palette_color_t *tgp = torch_gauge_palettes + player.torch_color * 4;
-  core.load_sprite_palette(tgp, TORCH_GAUGE_PALETTE, 1);
+  reload_torch_gauge_palette();
   core.load_sprite_palette(magic_keys_palette, MAGIC_KEY_HUD_PALETTE, 1);
-
-  init_timer(torch_timer, TORCH_GAUGE_SPEED);
 
   set_sprite_tile(TORCH_GAUGE_FLAME, FLAME_TILE_1);
   set_sprite_prop(TORCH_GAUGE_FLAME, TORCH_GAUGE_PROP);
@@ -1110,15 +1209,7 @@ static void init_hud(void) {
   set_sprite_prop(MAGIC_KEY_SPRITE_2, MAGIC_KEY_HUD_ATTR);
   set_sprite_prop(MAGIC_KEY_QTY, MAGIC_KEY_HUD_ATTR);
 
-  if (player.got_magic_key) {
-    move_sprite(MAGIC_KEY_SPRITE_1, MAGIC_KEYS_X, MAGIC_KEYS_Y - 1);
-    move_sprite(MAGIC_KEY_SPRITE_2, MAGIC_KEYS_X, MAGIC_KEYS_Y + 7);
-    move_sprite(MAGIC_KEY_QTY, MAGIC_KEYS_X + 9, MAGIC_KEYS_Y);
-  } else {
-    move_sprite(MAGIC_KEY_SPRITE_1, 0, 0);
-    move_sprite(MAGIC_KEY_SPRITE_2, 0, 0);
-    move_sprite(MAGIC_KEY_QTY, 0, 0);
-  }
+  place_magic_key_hud();
 }
 
 /**
@@ -1176,16 +1267,10 @@ static void update_hud(void) {
     set_sprite_tile(TORCH_GAUGE_BODY_4, SPRITE_TILE_CLEAR);
   }
 
-  if (player.got_magic_key) {
-    move_sprite(MAGIC_KEY_SPRITE_1, MAGIC_KEYS_X, MAGIC_KEYS_Y);
-    move_sprite(MAGIC_KEY_SPRITE_2, MAGIC_KEYS_X, MAGIC_KEYS_Y + 8);
-    move_sprite(MAGIC_KEY_QTY, MAGIC_KEYS_X + 9, MAGIC_KEYS_Y + 1);
-    set_sprite_tile(MAGIC_KEY_QTY, MAGIC_KEY_NUM_0 + player.magic_keys);
-  } else {
-    move_sprite(MAGIC_KEY_SPRITE_1, 0, 0);
-    move_sprite(MAGIC_KEY_SPRITE_2, 0, 0);
-    move_sprite(MAGIC_KEY_QTY, 0, 0);
-  }
+  place_magic_key_hud();
+  if (player.got_magic_key)
+    set_sprite_tile(MAGIC_KEY_QTY, player.magic_keys > 9
+      ? MAGIC_KEY_MANY : MAGIC_KEY_NUM_0 + player.magic_keys);
 }
 
 /**
@@ -1202,7 +1287,7 @@ static void clear_hud(void) {
   move_sprite(MAGIC_KEY_QTY, 0, 0);
 }
 
-void clear_map_sprites(void) {
+void clear_map_sprites(void) BANKED {
   clear_hero();
   clear_flames();
   clear_hud();
@@ -1210,21 +1295,24 @@ void clear_map_sprites(void) {
 }
 
 /**
- * Updates the player's torch / flame.
+ * Burns one unit of torch fuel. Called once per completed step, before the
+ * floor's encounter roll.
+ *
+ * A lit torch keeps random encounters away, so its fuel is counted in steps:
+ * standing still or reading a sign costs nothing. A full torch lasts
+ * TORCH_STEPS steps, and the step that burns the last unit is the first that
+ * can start a fight.
  */
-static void update_torch(void) {
+static void burn_torch(void) {
   if (player.torch_color == FLAME_NONE)
     return;
-
-  if (!update_timer(torch_timer))
+  if (player.torch_gauge == 0)
     return;
-
-  reset_timer(torch_timer);
 
   player.torch_gauge--;
   if (player.torch_gauge == 0) {
     player.torch_color = FLAME_NONE;
-    core.load_sprite_palette(torch_gauge_palettes, TORCH_GAUGE_PALETTE, 1);
+    reload_torch_gauge_palette();
   }
 }
 
@@ -1247,6 +1335,43 @@ static void map_fade_in(MapState to_state) {
   fade_to_state = to_state;
   fade_in();
   map_state = MAP_STATE_FADE_IN;
+}
+
+/**
+ * Tears the world map down after a fade out so another screen can build
+ * itself: display off, the pause menu's BG-map switch and scroll undone, the
+ * fade's sprite toggle undone, every sprite and the window hidden.
+ */
+static void leave_world_map(void) {
+  DISPLAY_OFF;
+  LCDC_REG &= 0b11110111;
+  SHOW_SPRITES;
+  move_bkg(0, 0);
+  for (uint8_t k = 0; k < 40; k++)
+    move_sprite(k, 0, 0);
+  hide_window();
+
+  map_menu.state = MAP_MENU_CLOSED;
+  map_state = MAP_STATE_INACTIVE;
+}
+
+/**
+ * Leaves the world map for the title screen after the pause menu's QUIT was
+ * confirmed and the fade out finished.
+ *
+ * Quitting is leaving the game, so it lands where leaving belongs rather than
+ * one screen short of it on the file picker. The handoff is the one the save
+ * select's own B button already uses to reach the title, and
+ * return_to_title_screen() skips the studio card, which has played once.
+ */
+static void quit_to_title(void) {
+  leave_world_map();
+  return_to_title_screen();
+  game_state = GAME_STATE_TITLE;
+}
+
+void map_start_credits(void) BANKED {
+  map_fade_out(MAP_STATE_CREDITS);
 }
 
 /**
@@ -1669,7 +1794,6 @@ static void load_exit(void) {
   if (active_exit.to_floor) {
     execute_on_init = true;
     set_active_floor(active_exit.to_floor);
-    on_load();
   }
 
   active_map = maps + active_exit.to_map;
@@ -1683,6 +1807,22 @@ static void load_exit(void) {
   clear_npcs();
   map_fade_in(MAP_STATE_EXIT_LOADED);
   DISPLAY_ON;
+}
+
+/**
+ * Plays the sound for leaving through an exit of the given type.
+ */
+static void play_exit_sound(ExitType type) {
+  switch (type) {
+  case EXIT_HOLE:
+    play_sound(sfx_falling);
+    break;
+  case EXIT_PORTAL:
+    play_sound(sfx_no_no_square);
+    break;
+  default:
+    play_sound(sfx_stairs);
+  }
 }
 
 /**
@@ -1702,16 +1842,7 @@ static bool handle_exit(void) {
     if (exit->col != x || exit->row != y)
       continue;
 
-    switch (exit->exit_type) {
-    case EXIT_HOLE:
-      play_sound(sfx_falling);
-      break;
-    case EXIT_PORTAL:
-      play_sound(sfx_no_no_square);
-      break;
-    default:
-      play_sound(sfx_stairs);
-    }
+    play_exit_sound(exit->exit_type);
 
     active_exit.to_map = exit->to_map;
     active_exit.to_col = exit->to_col;
@@ -1743,7 +1874,12 @@ static void start_move(Direction d) {
     play_wall_hit_sfx = true;
   }
 
-  if (destination->map_attr == MAP_WALL) {
+  // A stairway is drawn into a wall and opens toward the bottom of the
+  // screen, so a step onto one from the side meets that wall.
+  bool stairs_side = (d == LEFT || d == RIGHT) &&
+    (destination->tile == DOOR_STAIRS_UP || destination->tile == DOOR_STAIRS_DOWN);
+
+  if (destination->map_attr == MAP_WALL || stairs_side) {
     if (play_wall_hit_sfx) {
       play_sound(sfx_wall_hit);
       play_wall_hit_sfx = false;
@@ -1853,10 +1989,14 @@ static void update_map_move(void) {
 
   map_state = MAP_STATE_WAITING;
   hero_state = HERO_STILL;
+  burn_torch();
 
-  if (on_move())
-    return;
-
+  // Exit/special tiles go first: they get one specific arrival to fire on,
+  // so it can't be lost to a same-step encounter roll, which has other
+  // steps to land on instead. Neither dispatch consumes the step unless it
+  // actually reports doing something, so a tile whose exit/special check
+  // legitimately has nothing to do right now (an inactive portal combo, an
+  // already-used switch) still gets its usual encounter chance.
   MapTile *here = local_tiles + HERE;
 
   switch (here->map_attr) {
@@ -1870,6 +2010,9 @@ static void update_map_move(void) {
     break;
   default:
   }
+
+  if (on_move())
+    return;
 
   check_map_move();
 }
@@ -1987,7 +2130,9 @@ static bool check_chests(void) {
     str_maps_chest_open;
 
   if (used_key) {
-    char buf[96];
+    // map_textbox() keeps this pointer and draws the text after check_chests()
+    // returns, so the joined text needs storage that outlives the call.
+    static char buf[96];
 
     sprintf(buf, "%s\f%s", str_maps_chest_unlock_key, message);
     map_textbox(buf);
@@ -2141,12 +2286,16 @@ static void redraw_tile(uint8_t map_id, int8_t x, int8_t y) {
 
 void set_palette_at(uint8_t map_id, int8_t x, int8_t y, uint8_t palette) BANKED {
   TileOverrideHashEntry *entry = find_or_create_override_entry(map_id, x, y);
+  if (!entry)
+    return;
   entry->palette = palette;
   redraw_tile(map_id, x, y);
 }
 
 void set_tile_at(uint8_t map_id, int8_t x, int8_t y, uint8_t tile) BANKED {
   TileOverrideHashEntry *entry = find_or_create_override_entry(map_id, x, y);
+  if (!entry)
+    return;
   entry->tile = tile;
   redraw_tile(map_id, x, y);
 }
@@ -2197,6 +2346,7 @@ static bool check_doors(void) {
       player.magic_keys--;
       open_door(door->id);
       play_sound(sfx_door_unlock);
+      map_textbox(str_maps_door_unlock_key);
     } else {
       map_textbox(str_maps_door_locked_key);
     }
@@ -2212,10 +2362,9 @@ static bool check_doors(void) {
  * @param color Color of the flame.
  */
 static void light_torch(FlameColor color) {
-  player.torch_gauge = 32;
+  player.torch_gauge = TORCH_STEPS;
   player.torch_color = color;
-  const palette_color_t *palette = torch_gauge_palettes + color * 4;
-  core.load_sprite_palette(palette, TORCH_GAUGE_PALETTE, 1);
+  reload_torch_gauge_palette();
 }
 
 /**
@@ -2324,6 +2473,7 @@ void set_active_floor(FloorBank *f) BANKED {
   active_map = &maps[0];
   set_hero_position(default_x, default_y);
   reset_map_objects();
+  on_load();
 }
 
 void remap_exit(
@@ -2393,8 +2543,14 @@ void return_from_death(void) NONBANKED {
   player.sp = player.max_sp;
   player.magic_keys = 0;
   player.got_magic_key = true;
+  player.torch_gauge = 0;
 
+  // Same sequence as taking stairs to a new floor (see load_exit): run the
+  // floor's on_load now and its on_init on the first frame, so floor 1's
+  // encounter rate and one-shot encounter are reset instead of inheriting the
+  // floor the player died on.
   set_active_floor(&bank_floor1);
+  execute_on_init = true;
   initialize_world_map();
 
   map_fade_in(MAP_STATE_WAITING);
@@ -2502,6 +2658,22 @@ void update_map(void) {
       init_npcs();
       break;
     }
+    if (map_menu.state == MAP_MENU_QUIT) {
+      // Fade the menu out; MAP_STATE_QUIT then hands off to the title.
+      map_fade_out(MAP_STATE_QUIT);
+    }
+    return;
+  case MAP_STATE_QUIT:
+    quit_to_title();
+    return;
+  case MAP_STATE_CREDITS:
+    leave_world_map();
+    // init_credits() is NONBANKED and switches to bank 1 without switching
+    // back (src/credits.c), so this must stay the last thing this case
+    // does: any line added after it here would run from bank 1 instead of
+    // this file's own bank 2, which is only harmless today because nothing
+    // does.
+    init_credits();
     return;
   case MAP_STATE_INITIATE_BATTLE:
     init_timer(battle_wait_timer, 30);
@@ -2510,11 +2682,10 @@ void update_map(void) {
     return;
   case MAP_STATE_TELEPORT:
     map_fade_out(MAP_STATE_LOAD_EXIT);
-    play_sound(sfx_no_no_square);
+    play_exit_sound(active_exit.exit_type);
     return;
   }
 
-  update_torch();
   update_hero();
   update_flames();
   update_hud();
@@ -2527,6 +2698,10 @@ void update_map(void) {
 }
 
 void update_world_map(void) NONBANKED {
+  // update_map() and everything under it is bank 2 code, and callers can
+  // arrive with any bank paged in, so page bank 2 in here.
+  SWITCH_ROM(MAP_SYSTEM_BANK);
+
   if (map_state == MAP_STATE_START_BATTLE) {
     if (!update_timer(battle_wait_timer))
       return;
@@ -2538,7 +2713,7 @@ void update_world_map(void) NONBANKED {
   }
 }
 
-void draw_world_map(void) {
+void draw_world_map(void) NONBANKED {
   if (
     map_state == MAP_STATE_FADE_IN ||
     map_state == MAP_STATE_FADE_OUT ||
@@ -2549,4 +2724,136 @@ void draw_world_map(void) {
     return;
   }
   on_draw();
+}
+
+//------------------------------------------------------------------------------
+// Save / Load Support
+//------------------------------------------------------------------------------
+
+/**
+ * Every floor the player can be on, in progression order. A save stores the
+ * *index* into this table rather than `Floor::id`, so that resolving a save
+ * back to a floor never has to page in bank 8 to read the id.
+ *
+ * The `bank_floorN` structs themselves live in ROM0 (`floor.banks.c` is
+ * `#pragma bank 0`), so comparing `floor_bank` against these entries is always
+ * valid regardless of which bank happens to be switched in.
+ *
+ * Floor script globals (puzzle counters and the like) are captured and applied
+ * by `save.c`, which owns the `script_state` layout; the map system only deals
+ * with its own state here.
+ */
+static const FloorBank *const floor_table[] = {
+  &bank_floor1, &bank_floor2, &bank_floor3, &bank_floor4,
+  &bank_floor5, &bank_floor6, &bank_floor7, &bank_floor8,
+};
+
+#define FLOOR_TABLE_LEN ((uint8_t)(sizeof(floor_table) / sizeof(floor_table[0])))
+
+uint8_t map_floor_index(void) BANKED {
+  for (uint8_t k = 0; k < FLOOR_TABLE_LEN; k++) {
+    if (floor_bank == floor_table[k])
+      return k;
+  }
+  // A test floor, or a floor missing from the table. Fall back to floor 1 so a
+  // save is still loadable rather than dropping the player nowhere.
+  return 0;
+}
+
+void set_active_floor_index(uint8_t index) BANKED {
+  set_active_floor((FloorBank *)floor_table[index < FLOOR_TABLE_LEN ? index : 0]);
+}
+
+void map_capture_state(SaveGame *s) BANKED {
+  s->floor_index = map_floor_index();
+  s->map_id = active_map->id;
+  s->map_x = map_x;
+  s->map_y = map_y;
+  s->hero_direction = (uint8_t)hero_direction;
+
+  s->flags_chest_open = flags_chest_open;
+  s->flags_chest_locked = flags_chest_locked;
+  s->flags_lever_on = flags_lever_on;
+  s->flags_lever_stuck = flags_lever_stuck;
+  s->flags_door_locked = flags_door_locked;
+  s->flags_sconce_lit = flags_sconce_lit;
+  s->npc_visible = npc_visible;
+
+  for (uint8_t k = 0; k < 8; k++)
+    s->sconce_colors[k] = (uint8_t)sconce_colors[k];
+
+  for (uint8_t k = 0; k < TILE_HASHTABLE_SIZE; k++)
+    s->overrides[k] = tile_override_hashtable[k];
+}
+
+/**
+ * Bank 2 half of `map_restore_state`.
+ */
+static void restore_state(const SaveGame *s) {
+  // Loads floor data and resets every object flag to its ROM default, then
+  // runs the floor's `on_load`. The saved flags are applied over the top.
+  set_active_floor_index(s->floor_index);
+
+  uint8_t map_id = s->map_id;
+  if (map_id >= MAX_MAPS)
+    map_id = 0;
+  active_map = maps + map_id;
+  hero_direction = (Direction)s->hero_direction;
+  map_x = s->map_x;
+  map_y = s->map_y;
+
+  flags_chest_open = s->flags_chest_open;
+  flags_chest_locked = s->flags_chest_locked;
+  flags_lever_on = s->flags_lever_on;
+  flags_lever_stuck = s->flags_lever_stuck;
+  flags_door_locked = s->flags_door_locked;
+  flags_sconce_lit = s->flags_sconce_lit;
+  npc_visible = s->npc_visible;
+
+  for (uint8_t k = 0; k < 8; k++)
+    sconce_colors[k] = (FlameColor)s->sconce_colors[k];
+
+  // `refresh_map_screen` already resolves each door's open/closed tile from
+  // `flags_door_locked` (see the HASH_TYPE_DOOR case in `get_map_tile`), so
+  // this is belt and braces: it makes `update_door_graphics` repaint the doors
+  // in view on the first frame as well. Graphics only, no floor scripts run.
+  doors_updated = 0xFFFF;
+
+  // `sconces_updated` is deliberately NOT set: `check_sconce_changed` runs the
+  // sconce `on_lit` callbacks, which are scripts (opening doors, spawning
+  // encounters). Replaying those on load would re-fire events the player has
+  // already seen. The flames themselves get rebuilt by `init_flames()`, which
+  // `init_world_map()` calls after this, reading the state restored above.
+  sconces_updated = 0;
+
+  refresh_local_tiles = true;
+
+  // Script counters and tile overrides are applied in a second phase, once the
+  // floor's on_init has done its own resets. See the on_init trampoline.
+  pending_save_restore = true;
+}
+
+void map_apply_deferred_state(const SaveGame *s) BANKED {
+  for (uint8_t k = 0; k < TILE_HASHTABLE_SIZE; k++)
+    tile_override_hashtable[k] = s->overrides[k];
+
+  // The screen was drawn before this ran; repaint every overridden tile that
+  // is in view. redraw_tile ignores anything off-map or off-screen.
+  const TileOverrideHashEntry *e = tile_override_hashtable;
+  for (uint8_t k = 0; k < TILE_HASHTABLE_SIZE; k++, e++) {
+    if (e->map_id != 0xFF)
+      redraw_tile(e->map_id, e->x, e->y);
+  }
+
+  refresh_local_tiles = true;
+}
+
+void map_restore_state(const SaveGame *s) NONBANKED {
+  // Save and restore the caller's bank rather than leaving bank 2 paged in.
+  // `save.c` does not live on bank 2, so returning with bank 2 selected would
+  // drop the caller's own code out from under it.
+  const uint8_t _prev_bank = CURRENT_BANK;
+  SWITCH_ROM(MAP_SYSTEM_BANK);
+  restore_state(s);
+  SWITCH_ROM(_prev_bank);
 }

@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+
+/**
+ * Prints a release's notes: the lines CHANGELOG.md gained since the given
+ * commit, each under the section heading it sits in. Version headings are
+ * left out, since the release's title names the version, and so is anything
+ * above the first one. Prints nothing when the changelog gained no lines.
+ *
+ * Usage: changelog2notes <base commit>
+ */
+const file = 'CHANGELOG.md';
+const base = process.argv[2];
+if (!base) {
+  console.error('Usage: changelog2notes <base commit>');
+  process.exit(2);
+}
+
+// Line numbers, from 1, of the lines the changelog gained.
+const added = new Set();
+const diff = execFileSync(
+  'git', ['diff', '--unified=0', base, 'HEAD', '--', file], { encoding: 'utf8' });
+for (const hunk of diff.matchAll(/^@@ -\S+ \+(\d+)(?:,(\d+))? @@/gm)) {
+  const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+  for (let k = 0; k < count; k++)
+    added.add(Number(hunk[1]) + k);
+}
+
+// The gained lines by section, in the order the sections come.
+const sections = [];
+let inVersion = false;
+let section = null;
+fs.readFileSync(file, 'utf8').split('\n').forEach((line, k) => {
+  if (line.startsWith('## ')) {
+    inVersion = true;
+    section = null;
+  } else if (line.startsWith('### ')) {
+    section = null;
+    if (inVersion)
+      section = { heading: line, lines: [] };
+  } else if (inVersion && added.has(k + 1) && line.trim()) {
+    if (!section)
+      section = { heading: null, lines: [] };
+    if (!section.lines.length)
+      sections.push(section);
+    section.lines.push(line);
+  }
+});
+
+const notes = sections.map(
+  (s) => [s.heading, s.lines.join('\n')].filter(Boolean).join('\n\n'));
+if (notes.length)
+  console.log(notes.join('\n\n'));

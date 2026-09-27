@@ -33,6 +33,12 @@ extern const FloorBank bank_floor8;
 extern const FloorBank bank_floor_test;
 extern const FloorBank bank_floor_test2;
 
+/**
+ * Set when a new game starts, so floor 1 opens with a line of story.
+ * Floor 1's `on_init` clears it, so a death or a load goes straight to play.
+ */
+extern bool new_game_intro;
+
 
 /**
  * Set this as a custom chest handler to have the chest give the player a
@@ -66,9 +72,19 @@ bool floor7_chest_on_open(const Chest *chest);
 
 
 /**
+ * Teaches the ability an elite guards, for floors 2 to 6's elite victories.
+ * Each floor restores its elite when it loads, so after a death the hero can
+ * beat an elite whose ability they already know. That hero is told there is
+ * nothing left to learn instead.
+ *
+ * @param flag The ability this floor's elite teaches.
+ */
+void teach_elite_ability(AbilityFlag flag) BANKED;
+
+/**
  * Initializes the teleporter color animation.
  */
-void init_teleporter_animation(uint8_t p, palette_color_t *colors) NONBANKED;
+void init_teleporter_animation(uint8_t p, const palette_color_t *colors) NONBANKED;
 
 /**
  * Called to cycle the "bright" color of the given palette for the teleporter

@@ -247,6 +247,10 @@ typedef struct Timer {
  */
 typedef enum FlagPage {
   /**
+   * Game-wide flags, saved with the game (see FLAG_GAME_*).
+   */
+  FLAGS_GAME = 0,
+  /**
    * 8-bit bitfield of flags to use to determine if a chest is open.
    */
   FLAGS_CHEST_OPEN = 27,
@@ -273,6 +277,11 @@ typedef enum FlagPage {
  * items, scenarios, etc.
  */
 extern uint8_t flags[32];
+
+/**
+ * FLAGS_GAME: the dragon has been slain and the credits rolled on this save.
+ */
+#define FLAG_GAME_COMPLETE FLAG(0)
 
 /**
  * Determines if the flag on the given page is set.
@@ -339,6 +348,11 @@ typedef enum MonsterTiles {
 } MonsterTiles;
 
 /**
+ * Seconds of elapsed play time for the current game. Saved with the game.
+ */
+extern uint16_t play_seconds;
+
+/**
  * Bitfield for buttons that are currently being held down.
  *
  * @see J_START, J_SELECT, J_A, J_B, J_UP, J_DOWN, J_LEFT, J_RIGHT
@@ -358,6 +372,11 @@ extern uint8_t joypad_pressed;
  * @see J_START, J_SELECT, J_A, J_B, J_UP, J_DOWN, J_LEFT, J_RIGHT
  */
 extern uint8_t joypad_released;
+
+/**
+ * Bitmask of the four D-pad directions.
+ */
+#define J_DPAD (J_UP | J_DOWN | J_LEFT | J_RIGHT)
 
 /**
  * @param b Button bitmask.
@@ -395,11 +414,13 @@ extern const palette_color_t blank_palette[4];
  */
 typedef enum GameState {
   GAME_STATE_TITLE,
+  GAME_STATE_SAVE_SELECT,
   GAME_STATE_HERO_SELECT,
   GAME_STATE_WORLD_MAP,
   GAME_STATE_BATTLE,
   GAME_STATE_DEATH,
   GAME_STATE_CREDITS,
+  GAME_STATE_NAME_ENTRY,
   GAME_STATE_TEST = 0xFF,
 } GameState;
 
@@ -592,23 +613,5 @@ extern const Core core;
  * it easy to compute the position for a tile given a 6-bit tile id.
  */
 extern const uint8_t map_tile_lookup[];
-
-/**
- * Debug address. Provides a way to write data values to a known memory location
- * when debugging code.
- */
-extern uint8_t *debug;
-
-/**
- * Debug address for 16-bit values.
- */
-extern uint16_t *debug16;
-
-inline void clear_debug(void) {
-  uint8_t *d = debug;
-  for (uint8_t k = 0; k < 16; k++)
-    *d++ = 0xFF;
-  debug = (void *)0xB000;
-}
 
 #endif

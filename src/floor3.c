@@ -47,13 +47,13 @@ static const Chest chests[] = {
   {
     CHEST_2,
     MAP_A, 13, 15, false, false,
-    str_chest_item_1pots,
+    str_chest_item_1pot,
     chest_item_1pot,
   },
   {
     CHEST_3,
     MAP_A, 18, 22, false, false,
-    str_chest_item_1eths,
+    str_chest_item_1eth,
     chest_item_1eth,
   },
   {
@@ -104,7 +104,6 @@ static const Exit exits[] = {
   { MAP_A, 17, 6, MAP_A, 3, 5, UP, EXIT_STAIRS },
   { MAP_A, 3, 5, MAP_A, 17, 6, DOWN, EXIT_STAIRS },
 
-  // TODO Fix this to point to floor 4
   { MAP_A, 4, 12, MAP_A, 24, 30, UP, EXIT_STAIRS, &bank_floor4},
 
   {END},
@@ -213,7 +212,7 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 
 static void on_boss_victory(void) BANKED {
@@ -224,26 +223,26 @@ static void on_boss_victory(void) BANKED {
 
 static void on_elite_victory(void) BANKED {
   set_npc_invisible(NPC_2);
-  grant_ability(ABILITY_2);
-  play_sound(sfx_big_powerup);
-  map_textbox(get_grant_message(ABILITY_2));
+  teach_elite_ability(ABILITY_2);
 }
 
-static bool on_boss_encouter(void) {
+static bool on_boss_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
-  gelatinous_cube_generator(monster, 24, B_TIER);
+  gelatinous_cube_generator(monster, 24, S_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_boss_victory);
   start_battle();
   return true;
 }
 
-static bool on_elite_encouter(void) {
+static bool on_elite_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   zombie_generator(monster, 21, B_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_elite_victory);
   start_battle();
   return true;
@@ -252,16 +251,16 @@ static bool on_elite_encouter(void) {
 static bool on_npc_action(const NPC *npc) {
   switch (npc->id) {
   case NPC_1:
-    if (player.level < 24) {
+    if (player.level < 18) {
       map_textbox(str_floor3_boss_not_yet);
       return true;
     }
     play_sound(sfx_monster_attack2);
-    map_textbox_with_action(str_floor3_boss, on_boss_encouter);
+    map_textbox_with_action(str_floor3_boss, on_boss_encounter);
     return true;
   case NPC_2:
     play_sound(sfx_monster_attack1);
-    map_textbox_with_action(str_floor3_brains, on_elite_encouter);
+    map_textbox_with_action(str_floor3_brains, on_elite_encounter);
     return true;
   }
   return false;
@@ -322,7 +321,7 @@ static const EncounterTable encounters_low[] = {
 // Max Level: 23
 static const EncounterTable encounters_high[] = {
   {
-    ODDS_20P, MONSTER_LAYOUT_2,
+    ODDS_20P, MONSTER_LAYOUT_1,
     MONSTER_ZOMBIE, 21, A_TIER,
   },
   {
@@ -359,6 +358,9 @@ static bool on_init(void) {
   return false;
 }
 
+// Palette 5 below: the bones on a goblin guard's tile once it has fought.
+#define DIM_BONES_PALETTE 4
+
 static void goblin_defender_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
@@ -367,32 +369,28 @@ static void goblin_defender_encounter(void) {
   start_battle();
 }
 
+/**
+ * Starts the goblin guard's fight at (x, y) if the hero stands there and that
+ * guard hasn't fought since the floor loaded. The map draws bones on each
+ * guard's tile in the bright bone palette, and the fight repaints them in the
+ * dim one as it sets `fought`, so the two always agree.
+ * @param fought The guard's special_enc flag.
+ * @return Whether the fight started.
+ */
+static bool goblin_guard(uint8_t x, uint8_t y, bool *fought) {
+  if (!player_at(x, y) || *fought)
+    return false;
+  *fought = true;
+  set_palette_at(MAP_A, x, y, DIM_BONES_PALETTE);
+  goblin_defender_encounter();
+  return true;
+}
+
 static bool on_special(void) {
-  if (player_at(3, 26) && !special_enc_1) {
-    goblin_defender_encounter();
-    special_enc_1 = true;
-    return true;
-  }
-
-  if (player_at(9, 26) && !special_enc_2) {
-    goblin_defender_encounter();
-    special_enc_2 = true;
-    return true;
-  }
-
-  if (player_at(22, 3) && !special_enc_3) {
-    goblin_defender_encounter();
-    special_enc_3 = true;
-    return true;
-  }
-
-  if (player_at(28, 3) && !special_enc_4) {
-    goblin_defender_encounter();
-    special_enc_4 = true;
-    return true;
-  }
-
-  return false;
+  return goblin_guard(3, 26, &special_enc_1) ||
+    goblin_guard(9, 26, &special_enc_2) ||
+    goblin_guard(22, 3, &special_enc_3) ||
+    goblin_guard(28, 3, &special_enc_4);
 }
 
 static bool on_move(void) {
@@ -474,16 +472,17 @@ static const palette_color_t palettes[] = {
   RGB8(85, 166, 57),
   RGB8(74, 45, 100),
   RGB8(37, 20, 0),
-  // Palette 4
-  RGB_WHITE,
-  RGB8(120, 120, 120),
-  RGB8(60, 60, 60),
-  RGB_BLACK,
-  // Palette 5
-  RGB_WHITE,
-  RGB8(120, 120, 120),
-  RGB8(60, 60, 60),
-  RGB_BLACK,
+  // Palette 4 - Bones on a goblin guard's waiting tile: the core colors, with
+  // bone white in the slot the floor uses for highlights
+  RGB8(200, 190, 150),
+  RGB8(85, 166, 57),
+  RGB8(74, 45, 100),
+  RGB8(37, 20, 0),
+  // Palette 5 - Bones once the guard has fought
+  RGB8(110, 140, 80),
+  RGB8(85, 166, 57),
+  RGB8(74, 45, 100),
+  RGB8(37, 20, 0),
   // Palette 6
   RGB_WHITE,
   RGB8(120, 120, 120),

@@ -175,10 +175,6 @@ typedef struct Encounter {
    */
   bool is_test;
   /**
-   * Denotes that this is the final boss of the game.
-   */
-  bool is_final_boss;
-  /**
    * Callback to execute upon encounter success. This callback is reset after
    * being called.
    */
@@ -214,8 +210,8 @@ inline void set_on_victory(void (*callback)(void) BANKED) {
 void config_random_encounter(uint8_t s, uint8_t ic, uint8_t i, bool ts);
 
 /**
- * Determines if a random encounter has occured.
- * @return `true` If a random encounter has occured.
+ * Determines if a random encounter has occurred.
+ * @return `true` If a random encounter has occurred.
  */
 bool check_random_encounter(void);
 
@@ -223,7 +219,7 @@ bool check_random_encounter(void);
  * Generates a random encounter from the given encounter table.
  * @param table Table to use when generating the encounter.
  */
-void generate_encounter(EncounterTable *table) NONBANKED;
+void generate_encounter(const EncounterTable *table) NONBANKED;
 
 /**
  * Sets the player's next action to a basic attack.
@@ -287,7 +283,7 @@ bool is_battle_over(void);
 /**
  * Resets the encounter so it can be reconfigured for another battle.
  */
-void reset_encounter(MonsterLayout layout);
+void reset_encounter(MonsterLayout layout) NONBANKED;
 
 /**
  * @return The monster at the given index.
@@ -298,9 +294,17 @@ inline Monster *get_monster(uint8_t idx) {
 }
 
 /**
- * Resets player combat stats and flags at the start of each round.
+ * Sets the player's combat stats to their bases and clears the battle's fled
+ * and died flags.
  */
 void reset_player_stats(void) NONBANKED;
+
+/**
+ * Sets the player's stats from their bases and active status effects, and
+ * rebuilds the buff and debuff flags from the same list. It starts from
+ * reset_player_stats(), so it also clears the battle's fled and died flags.
+ */
+void refresh_player_stats(void) BANKED;
 
 /**
  * Resets a monster's combat stats and flags at the start of each round.
@@ -313,7 +317,7 @@ void monster_reset_stats(Monster *m) NONBANKED;
  * @param list Effects lists.
  * @param effect Status effect to apply.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @param immune Debuff immunities for the entity.
  * @return The result of the status effect application.
  */
@@ -327,8 +331,7 @@ StatusEffectResult apply_status_effect(
 ) BANKED;
 
 /**
- * Handles the player "flee" action.
- * @return Whether or not the player could flee.
+ * Handles the player "flee" action and sets `encounter.player_fled`.
  */
 void player_flee(void);
 
@@ -351,7 +354,7 @@ bool has_effect_slot(
  * Attempts to apply the 'blind' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @param immune Debuff immunities for the entity.
  * @return The result of the status effect application.
  */
@@ -370,7 +373,7 @@ inline StatusEffectResult apply_blind(
  * Attempts to apply the 'scared' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @param immune Debuff immunities for the entity.
  * @return The result of the status effect application.
  */
@@ -389,7 +392,7 @@ inline StatusEffectResult apply_scared(
  * Attempts to apply the 'paralyzed' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @param immune Debuff immunities for the entity.
  * @return The result of the status effect application.
  */
@@ -408,7 +411,7 @@ inline StatusEffectResult apply_paralyzed(
  * Attempts to apply the 'poisoned' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @param immune Debuff immunities for the entity.
  * @return The result of the status effect application.
  */
@@ -427,7 +430,7 @@ inline StatusEffectResult apply_poison(
  * Attempts to apply the 'confused' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @param immune Debuff immunities for the entity.
  * @return The result of the status effect application.
  */
@@ -446,7 +449,7 @@ inline StatusEffectResult apply_confused(
  * Attempts to apply the 'AGL down' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @param immune Debuff immunities for the entity.
  * @return The result of the status effect application.
  */
@@ -465,7 +468,7 @@ inline StatusEffectResult apply_agl_down(
  * Attempts to apply the 'ATK down' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @param immune Debuff immunities for the entity.
  * @return The result of the status effect application.
  */
@@ -484,7 +487,7 @@ inline StatusEffectResult apply_atk_down(
  * Attempts to apply the 'DEF down' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @param immune Debuff immunities for the entity.
  * @return The result of the status effect application.
  */
@@ -503,7 +506,7 @@ inline StatusEffectResult apply_def_down(
  * Attempts to apply the 'haste' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @return The result of the status effect application.
  */
 inline StatusEffectResult apply_haste(
@@ -520,7 +523,7 @@ inline StatusEffectResult apply_haste(
  * Attempts to apply the 'regen' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @return The result of the status effect application.
  */
 inline StatusEffectResult apply_regen(
@@ -537,7 +540,7 @@ inline StatusEffectResult apply_regen(
  * Attempts to apply the 'AGL up' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @return The result of the status effect application.
  */
 inline StatusEffectResult apply_agl_up(
@@ -554,7 +557,7 @@ inline StatusEffectResult apply_agl_up(
  * Attempts to apply the 'ATK up' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @return The result of the status effect application.
  */
 inline StatusEffectResult apply_atk_up(
@@ -571,7 +574,7 @@ inline StatusEffectResult apply_atk_up(
  * Attempts to apply the 'DEF up' status effect.
  * @param list List of status effects for the entity.
  * @param tier Power tier for the effect (potency, basically).
- * @param duration Duration for the effect (0 means endless).
+ * @param duration Turns the effect lasts, or EFFECT_DURATION_PERPETUAL.
  * @return The result of the status effect application.
  */
 inline StatusEffectResult apply_def_up(

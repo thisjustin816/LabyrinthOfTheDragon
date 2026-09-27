@@ -10,6 +10,7 @@
 #include "battle.effects.h"
 #include "encounter.h"
 #include "player.h"
+#include "save.h"
 #include "monster.h"
 #include "tables.h"
 #include "sound.h"
@@ -59,20 +60,80 @@ static void update_stats(
 }
 
 /**
+ * Set while a class's basic attack resolves, so `damage_monster` can withhold
+ * the aspect-vulnerability bonus.
+ *
+ * Issue #41: a vulnerable monster took double damage from *every* hit, and a
+ * basic attack happens every turn for free. Against the zombie and the
+ * gelatinous cube that doubled the druid's and sorcerer's whole damage output
+ * for the fight, which is the advantage the issue describes. The 2x is now what
+ * you get for spending an ability; a basic attack deals normal damage to a
+ * vulnerable target and prints the normal hit line.
+ *
+ * Resistance still applies to basic attacks: an enemy shrugging off the wrong
+ * damage type should always be felt.
+ */
+static bool basic_attack;
+
+/**
+ * Set by `fell_monster` when a death knight rises, and read by
+ * `announce_death_knight_rise` once the player's action has finished.
+ */
+static bool death_knight_rose;
+
+/**
+ * Takes a monster to 0 HP. A death knight gets one chance per fight, 3 in 16,
+ * to rise at a quarter of its HP instead. Every druid, fighter, monk, and
+ * sorcerer attack that can kill goes through here, so none of them skips that
+ * roll.
+ * @param monster Monster being struck down.
+ */
+static void fell_monster(Monster *monster) {
+  monster->target_hp = 0;
+  if (
+    monster->type != MONSTER_DEATHKNIGHT ||
+    (monster->parameter & DEATH_KNIGHT_REVIVE_USED)
+  )
+    return;
+  monster->parameter |= DEATH_KNIGHT_REVIVE_USED;
+  if (d16() < 3) {
+    monster->target_hp = monster->max_hp / 4;
+    death_knight_rose = true;
+  }
+}
+
+/**
+ * Replaces the action's result line with the death knight's rise, if the action
+ * caused one. It runs after the whole action because area attacks skip their
+ * own line and Wild Magic writes its outcome after the damage, and either would
+ * hide the rise.
+ */
+static void announce_death_knight_rise(void) {
+  if (!death_knight_rose)
+    return;
+  death_knight_rose = false;
+  sprintf(battle_post_message, str_player_deathknight_revive);
+  skip_post_message = false;
+}
+
+/**
  * Applies damage to the target monster. Takes immunities, etc. into account and
  * handles battle result messages.
  * @param base_damage Base damage for the attack.
  * @param type Aspect for the damage.
+ * @return Whether the blow landed: false when there is no target, or the target
+ *   is immune or phases out of it. A phase plays the miss sound, so a caller
+ *   plays its hit sound only for a blow that landed.
  */
-static void damage_monster(uint16_t base_damage, DamageAspect type) {
+static bool damage_monster(uint16_t base_damage, DamageAspect type) {
   Monster *monster = encounter.target;
 
   if (!monster)
-    return;
+    return false;
 
   if (monster->aspect_immune & type) {
     sprintf(battle_post_message, str_player_hit_immune);
-    return;
+    return false;
   }
 
   switch (monster->type) {
@@ -82,7 +143,8 @@ static void damage_monster(uint16_t base_damage, DamageAspect type) {
       break;
     monster->parameter = monster->exp_tier > B_TIER ? 2 : 4;
     sprintf(battle_post_message, str_player_displacer_beast_phase);
-    return;
+    SFX_MISS;
+    return false;
   }
 
   uint8_t roll = d16();
@@ -93,32 +155,88 @@ static void damage_monster(uint16_t base_damage, DamageAspect type) {
   if (hasted)
     damage += calc_damage(d16(), base_damage);
 
+  const bool weak = (monster->aspect_vuln & type) && !basic_attack;
+
+  // A crit ignores resistance but still doubles on a weakness. Without the
+  // doubling, a crit on a weak monster would deal less than a plain hit.
   if (critical) {
+    if (weak)
+      damage <<= 1;
     sprintf(battle_post_message, str_player_hit_crit, damage);
   } else if (monster->aspect_resist & type) {
     damage >>= 1;
     sprintf(battle_post_message, str_player_hit_resist, damage);
-  } else if (monster->aspect_vuln & type) {
+  } else if (weak) {
     damage <<= 1;
     sprintf(battle_post_message, str_player_hit_vuln, damage);
   } else {
     sprintf(battle_post_message, str_player_hit, damage);
   }
 
-  if (monster->target_hp < damage) {
-    monster->target_hp = 0;
-    if (
-      monster->type == MONSTER_DEATHKNIGHT &&
-      !(monster->parameter & DEATH_KNIGHT_REVIVE_USED) &&
-      d16() < 3
-    ) {
-      monster->parameter |= DEATH_KNIGHT_REVIVE_USED;
-      monster->target_hp = monster->max_hp / 4;
-      sprintf(battle_post_message, str_player_deathknight_revive);
-    }
-  }
+  if (monster->target_hp <= damage)
+    fell_monster(monster);
   else
     monster->target_hp -= damage;
+
+  return true;
+}
+
+/**
+ * What the area attack being resolved did, for its result line: the damage
+ * each monster took by slot, 0 for one it missed or couldn't hurt, and a bit
+ * per slot that was standing when it struck.
+ */
+static uint16_t area_damage[3];
+static uint8_t area_targets;
+
+/**
+ * Writes an area attack's result line: a single hit's line when one monster
+ * stood, one number when every monster took the same, and each monster's
+ * damage left to right otherwise.
+ * @param type Aspect type for the damage.
+ * @return Whether the attack hurt any monster, so the caller can pick a sound.
+ */
+static bool report_area_damage(DamageAspect type) {
+  uint16_t dealt[3];
+  uint8_t n = 0;
+  uint8_t only = 0;
+  bool same = true;
+  bool all_immune = true;
+  for (uint8_t k = 0; k < 3; k++) {
+    if (!(area_targets & (1 << k)))
+      continue;
+    if (n && area_damage[k] != dealt[0])
+      same = false;
+    if (!(encounter.monsters[k].aspect_immune & type))
+      all_immune = false;
+    only = k;
+    dealt[n++] = area_damage[k];
+  }
+
+  if (same && !dealt[0]) {
+    if (all_immune)
+      sprintf(battle_post_message, str_player_hit_immune);
+    else
+      sprintf(battle_post_message, n == 1 ? str_player_miss : str_player_miss_all);
+    return false;
+  }
+
+  if (n == 1) {
+    const Monster *monster = encounter.monsters + only;
+    if (monster->aspect_resist & type)
+      sprintf(battle_post_message, str_player_hit_resist, dealt[0]);
+    else if (monster->aspect_vuln & type)
+      sprintf(battle_post_message, str_player_hit_vuln, dealt[0]);
+    else
+      sprintf(battle_post_message, str_player_hit, dealt[0]);
+  } else if (same) {
+    sprintf(battle_post_message, str_player_hit_each, dealt[0]);
+  } else if (n == 2) {
+    sprintf(battle_post_message, str_player_hit_two, dealt[0], dealt[1]);
+  } else {
+    sprintf(battle_post_message, str_player_hit_three, dealt[0], dealt[1], dealt[2]);
+  }
+  return true;
 }
 
 /**
@@ -145,10 +263,13 @@ static uint8_t damage_all(
   Monster *monster = encounter.monsters;
   uint8_t atk_roll = d256();
   uint8_t hits = 0;
+  area_targets = 0;
 
   for (uint8_t k = 0; k < 3; k++, monster++) {
     if (!monster->active)
       continue;
+    area_targets |= 1 << k;
+    area_damage[k] = 0;
     if (monster->aspect_immune & type)
       continue;
 
@@ -179,9 +300,10 @@ static uint8_t damage_all(
     } else if (monster->aspect_vuln & type) {
       d = damage << 1;
     }
+    area_damage[k] = d;
 
-    if (monster->target_hp < d)
-      monster->target_hp = 0;
+    if (monster->target_hp <= d)
+      fell_monster(monster);
     else
       monster->target_hp -= d;
   }
@@ -203,9 +325,12 @@ static void damage_all_no_miss(uint16_t base_damage, DamageAspect type) {
     damage += calc_damage(d16(), base_damage);
 
   Monster *monster = encounter.monsters;
+  area_targets = 0;
   for (uint8_t k = 0; k < 3; k++, monster++) {
     if (!monster->active)
       continue;
+    area_targets |= 1 << k;
+    area_damage[k] = 0;
 
     if (monster->aspect_immune & type)
       continue;
@@ -229,9 +354,10 @@ static void damage_all_no_miss(uint16_t base_damage, DamageAspect type) {
       d = damage >> 1;
     else if (monster->aspect_vuln & type)
       d = damage << 1;
+    area_damage[k] = d;
 
-    if (monster->target_hp < d)
-      monster->target_hp = 0;
+    if (monster->target_hp <= d)
+      fell_monster(monster);
     else
       monster->target_hp -= d;
   }
@@ -239,16 +365,38 @@ static void damage_all_no_miss(uint16_t base_damage, DamageAspect type) {
 
 /**
  * Heals the player without going over max HP.
+ *
+ * The amount is rolled the same way damage is (0.75x to 1.25x, mean neutral);
+ * `is_critical` and `is_fumble` are documented as covering "damage / healing"
+ * rolls, and the crit, fumble and full-heal messages already existed for it.
+ *
  * @param hp Amount of HP to heal the player.
- * @param msg_format Message format to use for the battle text.
+ * @return The HP actually restored.
  */
 uint16_t heal_player(uint16_t hp) {
   if (has_special(SPECIAL_HASTE))
     hp = (hp * 3) / 2;
+
+  const uint8_t roll = d16();
+  hp = calc_damage(roll, hp);
+
   if (player.hp + hp > player.max_hp)
     hp = player.max_hp - player.hp;
   player.hp += hp;
-  PLAYER_HEAL(hp);
+
+  if (player.hp == player.max_hp) {
+    sprintf(battle_post_message, str_player_heal_complete);
+    SFX_HEAL;
+  } else if (is_critical(roll)) {
+    sprintf(battle_post_message, str_player_heal_crit, hp);
+    SFX_HEAL;
+  } else if (is_fumble(roll)) {
+    sprintf(battle_post_message, str_player_heal_fumble, hp);
+    SFX_HEAL;
+  } else {
+    PLAYER_HEAL(hp);
+  }
+
   return hp;
 }
 
@@ -268,6 +416,18 @@ static void druid_update_stats(void) {
   );
 }
 
+/**
+ * `damage_monster` for a class's basic attack. Wrapping the call keeps the flag
+ * from leaking past the early returns in the attack functions.
+ * @return Whether the blow landed.
+ */
+static bool damage_monster_basic(uint16_t base_damage, DamageAspect type) {
+  basic_attack = true;
+  const bool landed = damage_monster(base_damage, type);
+  basic_attack = false;
+  return landed;
+}
+
 void druid_base_attack(void) {
   sprintf(battle_pre_message, str_player_poison_spray);
 
@@ -280,8 +440,8 @@ void druid_base_attack(void) {
   PowerTier damage_tier = C_TIER;
 
   const uint16_t base_dmg = get_player_damage(player.level, damage_tier);
-  damage_monster(base_dmg, DAMAGE_MAGICAL);
-  SFX_POISON_SPRAY;
+  if (damage_monster_basic(base_dmg, DAMAGE_MAGICAL))
+    SFX_POISON_SPRAY;
 }
 
 void druid_cure_wounds(void) {
@@ -292,8 +452,10 @@ void druid_cure_wounds(void) {
 void druid_bark_skin(void) {
   sprintf(battle_pre_message, str_player_bark_skin);
   SKIP_POST_MSG;
-  apply_def_up(encounter.player_status_effects, B_TIER, 0);
+  apply_def_up(
+    encounter.player_status_effects, B_TIER, EFFECT_DURATION_PERPETUAL);
   apply_special(SPECIAL_BARKSKIN);
+  SFX_MID_POWERUP;
 }
 
 void druid_lightning(void) {
@@ -310,19 +472,23 @@ void druid_lightning(void) {
   const uint16_t base_dmg = get_player_damage(
     level_offset(player.level, 10), damage_tier);
 
-  damage_monster(base_dmg, DAMAGE_AIR);
+  if (damage_monster(base_dmg, DAMAGE_AIR))
+    SFX_MAGIC;
 }
 
 void druid_heal(void) {
   sprintf(battle_pre_message, str_player_heal);
-  heal_player(player.max_hp);
+  // The druid's heal is a full heal. heal_player rolls 0.75x to 1.25x, so ask
+  // for one and a half bars: even a fumbled roll covers the whole deficit and
+  // the player reads "You're fully healed!".
+  heal_player(player.max_hp + (player.max_hp >> 1));
 }
 
 void druid_insect_plague(void) {
   sprintf(battle_pre_message, str_player_insect_plague);
 
   PowerTier tier = B_TIER;
-  if (player.level > 75)
+  if (player.level > 55)
     tier = S_TIER;
   else if (player.level > 35)
     tier = A_TIER;
@@ -331,17 +497,21 @@ void druid_insect_plague(void) {
   const uint16_t base_damage = get_player_damage(level, tier);
   uint8_t hits = damage_all(base_damage, player.matk, true, DAMAGE_MAGICAL);
 
-  if (hits == 0)
+  if (hits == 0) {
     PLAYER_MISS_ALL;
-  else
-    SKIP_POST_MSG;
+  } else {
+    report_area_damage(DAMAGE_MAGICAL);
+    SFX_MAGIC;
+  }
 }
 
 void druid_regen(void) {
   sprintf(battle_pre_message, str_player_regen);
   SKIP_POST_MSG;
-  PowerTier tier = player.level > 75 ? S_TIER : A_TIER;
-  apply_regen(encounter.player_status_effects, tier, 0);
+  PowerTier tier = player.level > 55 ? S_TIER : A_TIER;
+  apply_regen(
+    encounter.player_status_effects, tier, EFFECT_DURATION_PERPETUAL);
+  SFX_MID_POWERUP;
 }
 
 //------------------------------------------------------------------------------
@@ -369,8 +539,9 @@ void fighter_base_attack(void) {
     return;
   }
 
-  damage_monster(get_player_damage(player.level, C_TIER), DAMAGE_PHYSICAL);
-  battle_sfx = sfx_melee_attack;
+  const uint16_t base_dmg = get_player_damage(player.level, C_TIER);
+  if (damage_monster_basic(base_dmg, DAMAGE_PHYSICAL))
+    SFX_MELEE_ATTACK;
 }
 
 void fighter_second_wind(void) {
@@ -390,7 +561,8 @@ void fighter_action_surge(void) {
   Monster *target = encounter.target;
   const uint8_t attack_level = level_offset(player.level, 3);
   uint16_t base_dmg = get_player_damage(attack_level, tier);
-  damage_monster(base_dmg * 2, DAMAGE_PHYSICAL);
+  if (damage_monster(base_dmg * 2, DAMAGE_PHYSICAL))
+    SFX_ACTION_SURGE;
 }
 
 void fighter_cleave(void) {
@@ -401,23 +573,31 @@ void fighter_cleave(void) {
     tier = B_TIER;
   if (player.level > 50)
     tier = A_TIER;
-  if (player.level > 75)
+  if (player.level > 55)
     tier = S_TIER;
 
   const uint8_t level = level_offset(player.level, -2);
   const uint16_t base_damage = get_player_damage(level, tier);
-  uint8_t hits = damage_all(base_damage, player.matk, true, DAMAGE_MAGICAL);
+  uint8_t hits = damage_all(base_damage, player.atk, false, DAMAGE_PHYSICAL);
 
-  if (hits == 0)
+  if (hits == 0) {
     PLAYER_MISS_ALL;
-  else
-    SKIP_POST_MSG;
+  } else {
+    report_area_damage(DAMAGE_PHYSICAL);
+    SFX_MELEE_ATTACK;
+  }
 }
 
 void fighter_trip_attack(void) {
   sprintf(battle_pre_message, str_player_trip_attack);
 
   Monster *target = encounter.target;
+  if (target->special_immune & SPECIAL_TRIP) {
+    sprintf(battle_post_message, str_player_hit_immune);
+    SFX_FAIL;
+    return;
+  }
+
   uint8_t def = get_monster_def(level_offset(target->level, -5), C_TIER);
   if (!roll_attack_player(player.atk, def)) {
     PLAYER_MISS;
@@ -425,13 +605,14 @@ void fighter_trip_attack(void) {
   }
 
   uint8_t turns = 2;
-  if (player.level > 60)
+  if (player.level > 50)
     turns = 4;
   else if (player.level > 30)
     turns = 3;
 
   target->trip_turns = turns;
   sprintf(battle_post_message, str_player_trip_attack_hit);
+  SFX_MELEE_ATTACK;
 }
 
 void fighter_menace(void) {
@@ -442,16 +623,31 @@ void fighter_menace(void) {
   uint8_t turns = 2;
   if (player.level > 30)
     turns = 3;
-  if (player.level > 60) {
+  if (player.level > 50) {
     turns = 4;
     tier = S_TIER;
   }
 
+  // A roar that lands on nothing but immune targets should say so, the same
+  // way a physically-immune hit does, instead of always reading as a scare
+  // that worked.
+  bool landed = false, immune = false;
   Monster *monster = encounter.monsters;
   for (uint8_t k = 0; k < 3; k++, monster++) {
     if (!monster->active)
       continue;
-    apply_scared(monster->status_effects, tier, turns, monster->debuff_immune);
+    StatusEffectResult result = apply_scared(
+      monster->status_effects, tier, turns, monster->debuff_immune);
+    landed |= (result == STATUS_RESULT_SUCCESS);
+    immune |= (result == STATUS_RESULT_IMMUNE);
+  }
+
+  if (!landed && immune) {
+    sprintf(battle_post_message, str_player_hit_immune);
+    skip_post_message = false;
+    SFX_FAIL;
+  } else {
+    SFX_MAGIC;
   }
 }
 
@@ -459,6 +655,7 @@ void fighter_indomitable(void) {
   sprintf(battle_pre_message, str_player_indomitable);
   SKIP_POST_MSG;
   player.aspect_resist = 0xFF;
+  SFX_MID_POWERUP;
 }
 
 //------------------------------------------------------------------------------
@@ -487,8 +684,8 @@ void monk_base_attack(void) {
   }
 
   const uint16_t base_dmg = get_player_damage(player.level, B_TIER);
-  damage_monster(base_dmg, DAMAGE_PHYSICAL);
-  SFX_MONK_STRIKE;
+  if (damage_monster_basic(base_dmg, DAMAGE_PHYSICAL))
+    SFX_MONK_STRIKE;
 }
 
 void monk_evasion(void) {
@@ -505,7 +702,7 @@ void monk_evasion(void) {
     agl_up_duration = 3;
   }
 
-  if (player.level > 70) {
+  if (player.level > 54) {
     agl_up_tier = A_TIER;
   }
 
@@ -514,38 +711,56 @@ void monk_evasion(void) {
 }
 
 void monk_open_palm(void) {
+  sprintf(battle_pre_message, str_player_monk_open_palm);
+
   Monster *target = encounter.target;
   uint8_t atk = player.atk + player.agl;
 
   if (!roll_attack_player(atk, target->def)) {
-    sprintf(battle_pre_message, str_player_monk_open_palm);
     PLAYER_MISS;
     return;
   }
 
   PowerTier damage_tier = B_TIER;
-  if (player.level >= 65)
+  if (player.level >= 53)
     damage_tier = S_TIER;
   else if (player.level >= 30)
-    damage_tier = B_TIER;
+    damage_tier = A_TIER;
 
   uint8_t trip_chance = 2;
-  if (player.level >= 65)
+  if (player.level >= 53)
     trip_chance = 4;
   else if (player.level > 30)
     trip_chance = 3;
 
-  if (d8() < trip_chance && !(target->special_immune & SPECIAL_SLEET_STORM)) {
-    encounter.target->trip_turns = player.level > 30 ? 3 : 2;
-    sprintf(battle_pre_message, str_player_monk_open_palm_trip,
-      encounter.target->name, encounter.target->id);
-  } else {
-    sprintf(battle_pre_message, str_player_monk_open_palm);
-  }
+  const bool trips =
+    d8() < trip_chance && !(target->special_immune & SPECIAL_TRIP);
 
   uint8_t attack_level = level_offset(player.level, player.agl);
   const uint16_t base_dmg = get_player_damage(attack_level, damage_tier);
-  damage_monster(base_dmg, DAMAGE_PHYSICAL);
+  const bool landed = damage_monster(base_dmg, DAMAGE_PHYSICAL);
+  if (landed)
+    SFX_MONK_STRIKE;
+
+  // Only a palm that lands and leaves its target standing trips it. A death
+  // knight rising from the blow stays on its feet as well: the rise line
+  // replaces the whole result, so the trip would go unsaid.
+  if (!trips || !landed || !target->target_hp || death_knight_rose)
+    return;
+
+  target->trip_turns = player.level > 30 ? 3 : 2;
+
+  // The trip line goes under the damage line. That takes two of the text box's
+  // four rows, or three when the target resists, and a trip line that would not
+  // fit below it gets a page of its own.
+  char *end = battle_post_message;
+  uint8_t rows = 1;
+  for (; *end; end++) {
+    if (*end == '\n')
+      rows++;
+  }
+  *end++ = rows > 2 ? '\f' : '\n';
+  sprintf(end, str_player_monk_open_palm_trip, target->name, target->id);
 }
 
 void monk_still_mind(void) {
@@ -556,8 +771,21 @@ void monk_still_mind(void) {
     if (is_debuff(effect->effect))
       effect->active = false;
   }
+  // The stats and flags are otherwise only rebuilt at the start of the
+  // player's own turn; left stale, a monster acting before then still meets
+  // the lowered stats and reads a debuff this just cleared (floor 8's mind
+  // flayer: Extract Brain off a confusion Still Mind already cured).
+  refresh_player_stats();
+
+  // The immunity holds for the rest of the battle: the dragon carries three
+  // fright actions and a scared player rolls to flee every turn, so a cleanse
+  // alone would be undone before the monk could answer. reset_encounter()
+  // clears it.
+  player.debuff_immune |= FLAG_DEBUFF_SCARED;
+
   sprintf(battle_pre_message, str_player_monk_still_mind);
   sprintf(battle_post_message, str_player_monk_still_mind_post);
+  SFX_MID_POWERUP;
 }
 
 void monk_flurry(void) {
@@ -570,13 +798,13 @@ void monk_flurry(void) {
   }
 
   uint8_t attacks = 2;
-  if (player.level > 80)
-    attacks = 4;
-  if (player.level > 60)
+  if (player.level > 50)
     attacks = 3;
+  if (player.level > 56)
+    attacks = 4;
 
   PowerTier damage_tier = B_TIER;
-  if (player.level >= 65)
+  if (player.level >= 53)
     damage_tier = S_TIER;
   else if (player.level >= 30)
     damage_tier = A_TIER;
@@ -585,7 +813,8 @@ void monk_flurry(void) {
   uint16_t base_dmg = get_player_damage(attack_level, damage_tier);
   base_dmg *= attacks;
 
-  damage_monster(base_dmg, DAMAGE_PHYSICAL);
+  if (damage_monster(base_dmg, DAMAGE_PHYSICAL))
+    SFX_MONK_STRIKE;
 }
 
 void monk_diamond_body(void) {
@@ -597,7 +826,9 @@ void monk_diamond_body(void) {
     def_up_tier = A_TIER;
 
   player.aspect_resist = DAMAGE_PHYSICAL | DAMAGE_MAGICAL;
-  apply_def_up(encounter.player_status_effects, def_up_tier, 0);
+  apply_def_up(
+    encounter.player_status_effects, def_up_tier, EFFECT_DURATION_PERPETUAL);
+  SFX_MID_POWERUP;
 }
 
 void monk_quivering_palm(void) {
@@ -611,14 +842,15 @@ void monk_quivering_palm(void) {
 
   if (!(target->special_immune & SPECIAL_INSTANT_KILL)) {
     uint8_t kill_chance = 1;
-    if (player.level > 60)
+    if (player.level > 50)
       kill_chance = 2;
-    if (player.level > 80)
+    if (player.level > 56)
       kill_chance = 3;
 
     if (d8() < kill_chance) {
       sprintf(battle_post_message, str_player_monk_quivering_kill);
-      encounter.target->target_hp = 0;
+      fell_monster(encounter.target);
+      SFX_SPECIAL_CRIT;
       return;
     }
   }
@@ -627,7 +859,8 @@ void monk_quivering_palm(void) {
   uint16_t base_dmg = get_player_damage(attack_level, S_TIER);
   base_dmg *= 2;
 
-  damage_monster(base_dmg, DAMAGE_PHYSICAL);
+  if (damage_monster(base_dmg, DAMAGE_PHYSICAL))
+    SFX_MONK_STRIKE;
 }
 
 //------------------------------------------------------------------------------
@@ -650,8 +883,8 @@ void sorcerer_base_attack(void) {
   sprintf(battle_pre_message, str_player_sorc_magic_missile_one);
   const PowerTier tier = B_TIER;
   const uint8_t level = level_offset(player.level, 1);
-  damage_monster(get_player_damage(level, tier), DAMAGE_MAGICAL);
-  SFX_MAGIC_MISSILE;
+  if (damage_monster_basic(get_player_damage(level, tier), DAMAGE_MAGICAL))
+    SFX_MAGIC_MISSILE;
 }
 
 void sorcerer_darkness(void) {
@@ -668,19 +901,30 @@ void sorcerer_darkness(void) {
   if (player.level >= 45)
     tier = A_TIER;
 
+  // As with fighter_menace: say so when every target shrugged it off immune,
+  // rather than always reading as a blind that landed.
+  bool landed = false, immune = false;
   Monster *monster = encounter.monsters;
   for (uint8_t k = 0; k < 3; k++, monster++) {
     if (!monster->active)
       continue;
-    apply_blind(monster->status_effects, tier, turns, monster->debuff_immune);
+    StatusEffectResult result = apply_blind(
+      monster->status_effects, tier, turns, monster->debuff_immune);
+    landed |= (result == STATUS_RESULT_SUCCESS);
+    immune |= (result == STATUS_RESULT_IMMUNE);
   }
 
-  SFX_MAGIC;
+  if (!landed && immune) {
+    sprintf(battle_post_message, str_player_hit_immune);
+    skip_post_message = false;
+    SFX_FAIL;
+  } else {
+    SFX_MAGIC;
+  }
 }
 
 void sorcerer_fireball(void) {
   sprintf(battle_pre_message, str_player_sorc_fireball);
-  SKIP_POST_MSG;
 
   Monster *monster = encounter.monsters;
   uint8_t mdef = monster->mdef;
@@ -702,18 +946,49 @@ void sorcerer_fireball(void) {
     damage /= 2;
 
   damage_all_no_miss(damage, DAMAGE_FIRE);
+  if (report_area_damage(DAMAGE_FIRE))
+    SFX_MAGIC;
+  else
+    SFX_MISS;
 }
 
 void sorcerer_haste(void) {
   sprintf(battle_pre_message, str_player_sorc_haste);
   SKIP_POST_MSG;
-  apply_haste(encounter.player_status_effects, B_TIER, 0);
+  apply_haste(
+    encounter.player_status_effects, B_TIER, EFFECT_DURATION_PERPETUAL);
+  SFX_MID_POWERUP;
+}
+
+/**
+ * Brings down Sleetstorm's ice for the rest of the battle. When every monster
+ * there is immune to it, the storm says so instead, as Darkness and Menace do.
+ * @return Whether any monster in the fight can slip on the ice.
+ */
+static bool sleetstorm(void) {
+  sprintf(battle_pre_message, str_player_sorc_sleetstorm);
+
+  bool takes_hold = false;
+  Monster *monster = encounter.monsters;
+  for (uint8_t k = 0; k < 3; k++, monster++) {
+    if (monster->active && !(monster->special_immune & SPECIAL_SLEET_STORM))
+      takes_hold = true;
+  }
+
+  if (!takes_hold) {
+    sprintf(battle_post_message, str_player_hit_immune);
+    SFX_FAIL;
+    return false;
+  }
+
+  SKIP_POST_MSG;
+  SFX_MAGIC;
+  player.special_flags |= SPECIAL_SLEET_STORM;
+  return true;
 }
 
 void sorcerer_sleetstorm(void) {
-  sprintf(battle_pre_message, str_player_sorc_sleetstorm);
-  SKIP_POST_MSG;
-  player.special_flags |= SPECIAL_SLEET_STORM;
+  sleetstorm();
 }
 
 void sorcerer_disintegrate(void) {
@@ -730,12 +1005,13 @@ void sorcerer_disintegrate(void) {
     uint8_t kill_chance = 2;
     if (player.level > 40)
       kill_chance = 3;
-    if (player.level > 60)
+    if (player.level > 50)
       kill_chance = 4;
 
     if (d8() < kill_chance) {
       sprintf(battle_post_message, str_player_sorc_disintegrate_kill);
-      encounter.target->target_hp = 0;
+      fell_monster(encounter.target);
+      SFX_SPECIAL_CRIT;
       return;
     }
   }
@@ -743,43 +1019,92 @@ void sorcerer_disintegrate(void) {
   uint8_t attack_level = level_offset(player.level, 5);
   uint16_t base_dmg = get_player_damage(attack_level, S_TIER);
   base_dmg *= 2;
-  damage_monster(base_dmg, DAMAGE_MAGICAL);
+  if (damage_monster(base_dmg, DAMAGE_MAGICAL))
+    SFX_MAGIC;
+}
+
+// What a wild magic surge turned into. Fireball and sleetstorm overwrite the
+// pre-message on their way through and suppress their own post message, so the
+// surge has to report them itself; HP changes and landed debuffs show up on the
+// monsters and need no line.
+#define WILD_MAGIC_FIREBALL 1
+#define WILD_MAGIC_SLEETSTORM 2
+#define WILD_MAGIC_HP 4
+#define WILD_MAGIC_DEBUFF_LANDED 8
+#define WILD_MAGIC_IMMUNE 16
+
+/**
+ * @return The outcome bit for one of Wild Magic's debuff attempts.
+ */
+static uint8_t wild_magic_debuff(StatusEffectResult result) {
+  if (result == STATUS_RESULT_SUCCESS)
+    return WILD_MAGIC_DEBUFF_LANDED;
+  if (result == STATUS_RESULT_IMMUNE)
+    return WILD_MAGIC_IMMUNE;
+  return 0;
 }
 
 void sorcerer_wild_magic(void) {
   Monster *monster = encounter.monsters;
+  uint8_t outcome = 0;
 
   for (uint8_t k = 0; k < 3; k++, monster++) {
-    if (!monster->active)
+    // A monster an earlier roll's fireball just felled stays down: its HP
+    // rolls would otherwise bring it back.
+    if (!monster->active || !monster->target_hp)
       continue;
 
     uint8_t roll = d8();
 
     if (roll == 0) {
       monster->target_hp = 1;
+      outcome |= WILD_MAGIC_HP;
     } else if (roll == 1) {
       monster->target_hp = monster->max_hp - 1;
+      outcome |= WILD_MAGIC_HP;
     } else if (roll < 4) {
-      apply_agl_down(
-        monster->status_effects, A_TIER, 10, monster->debuff_immune);
-      apply_def_down(
-        monster->status_effects, A_TIER, 10, monster->debuff_immune);
-      apply_atk_down(
-        monster->status_effects, A_TIER, 10, monster->debuff_immune);
+      outcome |= wild_magic_debuff(apply_agl_down(
+        monster->status_effects, A_TIER, 10, monster->debuff_immune));
+      outcome |= wild_magic_debuff(apply_def_down(
+        monster->status_effects, A_TIER, 10, monster->debuff_immune));
+      outcome |= wild_magic_debuff(apply_atk_down(
+        monster->status_effects, A_TIER, 10, monster->debuff_immune));
     } else if (roll < 6) {
-      apply_confused(
-        monster->status_effects, A_TIER, 10, monster->debuff_immune);
-      apply_blind(
-        monster->status_effects, A_TIER, 10, monster->debuff_immune);
+      outcome |= wild_magic_debuff(apply_confused(
+        monster->status_effects, A_TIER, 10, monster->debuff_immune));
+      outcome |= wild_magic_debuff(apply_blind(
+        monster->status_effects, A_TIER, 10, monster->debuff_immune));
     } else if (roll == 6) {
       sorcerer_fireball();
+      outcome |= WILD_MAGIC_FIREBALL;
     } else {
-      sorcerer_sleetstorm();
+      outcome |= sleetstorm() ? WILD_MAGIC_SLEETSTORM : WILD_MAGIC_IMMUNE;
     }
   }
 
   sprintf(battle_pre_message, str_player_sorc_wild_magic);
-  SKIP_POST_MSG;
+
+  // Fireball and sleetstorm set the skip flag and a sound on their way through,
+  // so every outcome sets both again.
+  skip_post_message = false;
+  if (outcome & WILD_MAGIC_FIREBALL) {
+    sprintf(battle_post_message, str_player_sorc_wild_magic_fireball);
+    SFX_MAGIC;
+  } else if (outcome & WILD_MAGIC_SLEETSTORM) {
+    sprintf(battle_post_message, str_player_sorc_wild_magic_sleetstorm);
+    SFX_MAGIC;
+  } else if (outcome & (WILD_MAGIC_HP | WILD_MAGIC_DEBUFF_LANDED)) {
+    SKIP_POST_MSG;
+    SFX_MAGIC;
+  } else if (outcome & WILD_MAGIC_IMMUNE) {
+    // The storm did nothing but meet immunities: say so, as Darkness and
+    // Menace do, rather than fizzling.
+    sprintf(battle_post_message, str_player_hit_immune);
+    SFX_FAIL;
+  } else {
+    sprintf(battle_post_message, str_player_sorc_wild_magic_fizzle);
+    SFX_FAIL;
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -956,6 +1281,11 @@ void grant_ability(AbilityFlag flag) BANKED {
   set_player_abilities();
 }
 
+void player_refresh_abilities(void) BANKED {
+  set_class_abilities();
+  set_player_abilities();
+}
+
 char *get_druid_grant_message(AbilityFlag flag) {
   switch (flag) {
   case ABILITY_1:
@@ -1029,34 +1359,56 @@ const char *get_grant_message(AbilityFlag flag) BANKED {
   }
 }
 
+/**
+ * @return EXP needed for the level after `level`, or 0xFFFF at the cap.
+ */
+static uint16_t exp_for_next_level(uint8_t level) {
+  return level < MAX_PLAYER_LEVEL ? get_exp(level + 1) : 0xFFFF;
+}
+
 void set_player_level(uint8_t level) BANKED {
+  if (level > MAX_PLAYER_LEVEL)
+    level = MAX_PLAYER_LEVEL;
   player.level = level;
   player.exp = get_exp(player.level);
-  player.next_level_exp = get_exp(player.level + 1);
+  player.next_level_exp = exp_for_next_level(player.level);
   update_player_stats();
   full_heal_player();
 }
 
-void init_player(PlayerClass player_class) BANKED {
-  player.player_class = player_class;
-
-  switch (player.player_class) {
-  case CLASS_DRUID:
-    sprintf(player.name, "Lyra");
-    break;
+void default_hero_name(PlayerClass player_class, char *dst) BANKED {
+  const char *name;
+  switch (player_class) {
   case CLASS_FIGHTER:
-    sprintf(player.name, "Deneth");
+    name = "Deneth";
     break;
   case CLASS_MONK:
-    sprintf(player.name, "Ken");
+    name = "Ken";
     break;
   case CLASS_SORCERER:
-    sprintf(player.name, "Tyrion");
+    name = "Tyrion";
     break;
+  default:
+    name = "Lyra";
   }
+  uint8_t k = 0;
+  while (k < PLAYER_NAME_LEN && name[k]) {
+    dst[k] = name[k];
+    k++;
+  }
+  while (k < PLAYER_NAME_LEN)
+    dst[k++] = 0;
+}
+
+void init_player(PlayerClass player_class) BANKED {
+  player.player_class = player_class;
+  default_hero_name(player_class, player.name);
 
   player.has_torch = false;
+  player.torch_gauge = 0;
+  player.torch_color = FLAME_NONE;
   player.magic_keys = 0;
+  player.got_magic_key = false;
   clear_inventory();
 
   set_class_abilities();
@@ -1074,12 +1426,16 @@ void init_player(PlayerClass player_class) BANKED {
 
 bool level_up(uint16_t xp) BANKED {
   bool level_up = false;
-  player.exp += xp;
 
-  while (player.exp >= player.next_level_exp) {
+  // Saturate rather than wrap: level 99 needs 65118 EXP.
+  player.exp = (player.exp > 0xFFFF - xp) ? 0xFFFF : player.exp + xp;
+
+  // Stop at the cap. get_exp() clamps its argument, so the requirement stops
+  // rising at level 99, and without this check the loop would never end.
+  while (player.level < MAX_PLAYER_LEVEL && player.exp >= player.next_level_exp) {
     level_up = true;
     player.level++;
-    player.next_level_exp = get_exp(player.level + 1);
+    player.next_level_exp = exp_for_next_level(player.level);
   }
 
   if (level_up) {
@@ -1108,8 +1464,10 @@ void player_base_attack(void) BANKED {
     test_class_base_attack();
     break;
   }
+  announce_death_knight_rise();
 }
 
 void player_use_ability(const Ability *ability) BANKED {
   ability->execute();
+  announce_death_knight_rise();
 }

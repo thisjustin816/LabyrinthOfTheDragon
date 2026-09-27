@@ -80,7 +80,13 @@ static inline void use_remedy(void) {
     if (is_debuff(effect->effect))
       effect->active = false;
   }
+  // The stats and flags are otherwise only rebuilt at the start of the
+  // player's own turn; left stale, a monster acting before then still meets
+  // the lowered stats and reads a debuff this just cleared (floor 8's mind
+  // flayer: Extract Brain off a confusion a remedy already cured).
+  refresh_player_stats();
   sprintf(battle_pre_message, str_items_use_remedy);
+  SFX_HEAL;
   SKIP_POST_MSG;
 }
 
@@ -154,6 +160,18 @@ bool can_use_item(ItemId id) {
 }
 
 void use_item(ItemId id) {
+  // The menu only queued the item. It leaves the inventory here, on the turn it
+  // is used, so a turn the player never gets costs nothing, as with an
+  // ability's SP. What it would do can also have lapsed since it was chosen,
+  // such as Regen healing the bar full first.
+  if (!can_use_item(id)) {
+    sprintf(battle_pre_message, str_items_use_failed);
+    SKIP_POST_MSG;
+    SFX_FAIL;
+    return;
+  }
+  remove_item(id);
+
   Item *i = inventory + id;
   switch (i->id) {
     case ITEM_POTION:

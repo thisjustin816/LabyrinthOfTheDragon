@@ -61,22 +61,22 @@
 #define TORCH_GAUGE_FLAME 24
 
 /**
- * Sprite id for the torch gauge body positon 1.
+ * Sprite id for the torch gauge body position 1.
  */
 #define TORCH_GAUGE_BODY_1 25
 
 /**
- * Sprite id for the torch gauge body positon 2.
+ * Sprite id for the torch gauge body position 2.
  */
 #define TORCH_GAUGE_BODY_2 26
 
 /**
- * Sprite id for the torch gauge body positon 3.
+ * Sprite id for the torch gauge body position 3.
  */
 #define TORCH_GAUGE_BODY_3 27
 
 /**
- * Sprite id for the torch gauge body positon 4.
+ * Sprite id for the torch gauge body position 4.
  */
 #define TORCH_GAUGE_BODY_4 28
 
@@ -126,24 +126,31 @@
 #define SPRITE_TILE_CLEAR 0x74
 
 /**
- * Number of frames before reducing the torch gauge by 1.
- */
-#define TORCH_GAUGE_SPEED 10
-
-/**
  * Palette index for the torch gauge.
  */
 #define TORCH_GAUGE_PALETTE 4
 
 /**
- * Horizontal position of the magic keys HUD sprites.
+ * Steps a freshly lit torch burns for. light_torch() fills the gauge to this.
  */
-#define MAGIC_KEYS_X 16 + 8 * 6
+#define TORCH_STEPS 32
+
+/**
+ * Horizontal position of the magic keys HUD sprites.
+ *
+ * Tile column 17 of 20, which leaves the counter the same margin on the right
+ * that the torch gauge has on the left.
+ */
+#define MAGIC_KEYS_X (8 + 8 * 17)
 
 /**
  * Vertical position for the magic keys HUD sprites.
+ *
+ * Shares the torch gauge's top edge. The key graphic is two tiles tall, so it
+ * hangs a row below the gauge, and the quantity digit sits one pixel down from
+ * here, centered on the gauge's row.
  */
-#define MAGIC_KEYS_Y 22
+#define MAGIC_KEYS_Y TORCH_GAUGE_Y
 
 /**
  * Sprite id for the top "key" graphic sprite.
@@ -181,6 +188,12 @@
 #define MAGIC_KEY_NUM_0 0x30
 
 /**
+ * Tile id for the "*" shown in place of the key quantity above 9, which one
+ * digit can't show.
+ */
+#define MAGIC_KEY_MANY 0x3A
+
+/**
  * Palette to use for the magic keys hud.
  */
 #define MAGIC_KEY_HUD_PALETTE 5
@@ -213,42 +226,42 @@
 /**
  * Maximum maps per floor.
  */
-#define MAX_MAPS 4 + 1
+#define MAX_MAPS (4 + 1)
 
 /**
  * Maximum exits per floor.
  */
-#define MAX_EXITS 24 + 1
+#define MAX_EXITS (24 + 1)
 
 /**
  * Maximum chests per floor.
  */
-#define MAX_CHESTS 8 + 1
+#define MAX_CHESTS (8 + 1)
 
 /**
  * Maximum signs per floor.
  */
-#define MAX_SIGNS 8 + 1
+#define MAX_SIGNS (8 + 1)
 
 /**
  * Maximum levers per floor.
  */
-#define MAX_LEVERS 8 + 1
+#define MAX_LEVERS (8 + 1)
 
 /**
  * Max sconces per floor.
  */
-#define MAX_SCONCES 32 + 1
+#define MAX_SCONCES (32 + 1)
 
 /**
  * Max NPCs per floor.
  */
-#define MAX_NPCS 2 + 1
+#define MAX_NPCS (2 + 1)
 
 /**
  * Max doors per floor.
  */
-#define MAX_DOORS 12 + 1
+#define MAX_DOORS (12 + 1)
 
 /**
  * Sconce flame sprite ids.
@@ -285,7 +298,7 @@ typedef enum MapId {
  */
 typedef enum MapTileAttribute {
   /**
-   * Denotes an impassible wall.
+   * Denotes an impassable wall.
    */
   MAP_WALL,
   /**
@@ -365,7 +378,7 @@ typedef enum HeroState {
 } HeroState;
 
 /**
- * Main state enumaration for the world map controller.
+ * Main state enumeration for the world map controller.
  */
 typedef enum MapState {
   /**
@@ -386,7 +399,7 @@ typedef enum MapState {
    */
   MAP_STATE_FADE_OUT,
   /**
-   * Denotes that the graphics are fading back in after a progessive map/area
+   * Denotes that the graphics are fading back in after a progressive map/area
    * load.
    */
   MAP_STATE_FADE_IN,
@@ -431,6 +444,16 @@ typedef enum MapState {
    * The map should teleport the player to the specified location.
    */
   MAP_STATE_TELEPORT,
+  /**
+   * The pause menu's QUIT was confirmed and the fade out has finished: the
+   * display is handed to the title screen.
+   */
+  MAP_STATE_QUIT,
+  /**
+   * The game was finished on the map (floor 8's staircase) and the fade out
+   * has finished: the display is handed to the credits.
+   */
+  MAP_STATE_CREDITS,
 } MapState;
 
 /**
@@ -614,6 +637,9 @@ typedef struct Chest {
    * @param chest The chest the player is attempting to open.
    * @return `true` if the default opening behavior for the chest should be
    *   prevented.
+   *
+   * Must live in floor_common.c (bank 2): map.c's on_open() trampoline calls
+   * this without a bank switch, unlike every other object callback.
    */
   bool (*on_open)(const struct Chest *chest);
 } Chest;
@@ -967,7 +993,7 @@ typedef struct TileHashEntry {
    */
   int8_t x;
   /**
-   * Vertical positon for the associated tile in the map.
+   * Vertical position for the associated tile in the map.
    */
   int8_t y;
   /**
@@ -991,7 +1017,7 @@ typedef struct TileOverrideHashEntry {
    */
   int8_t x;
   /**
-   * Vertical positon for the associated tile in the map.
+   * Vertical position for the associated tile in the map.
    */
   int8_t y;
   /**
@@ -1010,14 +1036,30 @@ typedef struct TileOverrideHashEntry {
 typedef enum MapMenuState {
   MAP_MENU_CLOSED,
   MAP_MENU_OPEN,
+  /**
+   * QUIT was chosen once and the "QUIT THE GAME?" prompt, with YES and NO, is
+   * showing.
+   */
+  MAP_MENU_CONFIRM_QUIT,
+  /**
+   * QUIT was confirmed; the map should leave for the title screen.
+   */
+  MAP_MENU_QUIT,
+  /**
+   * The item picker is open in the message row. LEFT / RIGHT cycle the usable
+   * healing items, A drinks one, B goes back to the options.
+   */
+  MAP_MENU_ITEMS,
 } MapMenuState;
 
 /**
  * Cursor positions for the map menu.
  */
 typedef enum MapMenuCursor {
+  MAP_MENU_CURSOR_RETURN,
   MAP_MENU_CURSOR_SAVE,
   MAP_MENU_CURSOR_QUIT,
+  MAP_MENU_CURSOR_ITEMS,
 } MapMenuCursor;
 
 /**
@@ -1046,6 +1088,12 @@ extern MapTile local_tiles[5];
 extern bool init_random;
 
 /**
+ * A running count of frames since power-on, taken on the screens before play
+ * and on each map until its first move, which seeds the dice.
+ */
+extern uint16_t new_seed;
+
+/**
  * Top-level state for the map system.
  */
 extern MapState map_state;
@@ -1056,7 +1104,7 @@ extern MapState map_state;
 extern int8_t map_x;
 
 /**
- * Veritcal map coordinate.
+ * Vertical map coordinate.
  */
 extern int8_t map_y;
 
@@ -1180,19 +1228,28 @@ inline void set_map_position(int8_t x, int8_t y) {
 
 /**
  * Sets position of map based on hero position. Does not re-render the map. You
- * must call `refresh_map_screen()` or load the screen progresively.
+ * must call `refresh_map_screen()` or load the screen progressively.
  */
 inline void set_hero_position(int8_t x, int8_t y) {
   map_x = x - HERO_X_OFFSET;
-  map_y = y - HERO_X_OFFSET;
+  map_y = y - HERO_Y_OFFSET;
 }
 
 /**
- * Sets the active floor for the map system. An active floor must be set prior
- * to initializing map system controller.
+ * Sets the active floor for the map system: loads its data, resets its
+ * objects to their ROM defaults, and runs its `on_load`. An active floor must
+ * be set prior to initializing map system controller.
  * @param floor Floor to set.
  */
 void set_active_floor(FloorBank *f) BANKED;
+
+/**
+ * Sets the active floor by its index in the floor table a save stores, the
+ * index `map_floor_index` returns: 0 for floor 1 through 7 for floor 8. An
+ * index past the table sets floor 1.
+ * @param index Floor table index.
+ */
+void set_active_floor_index(uint8_t index) BANKED;
 
 /**
  * Initialize the world map controller.
@@ -1202,16 +1259,16 @@ void init_world_map(void) NONBANKED;
 /**
  * Update callback for the world map controller.
  */
-void update_world_map(void);
+void update_world_map(void) NONBANKED;
 
 /**
  * VBLANK draw routine for the world map controller.
  */
-void draw_world_map(void);
+void draw_world_map(void) NONBANKED;
 
 /**
  * Initiates battle using the currently configured encounter. This should be
- * called by area handlers to start battle after initalizing the `encounter`
+ * called by area handlers to start battle after initializing the `encounter`
  * state used by the battle system.
  */
 inline void start_battle(void) {
@@ -1231,32 +1288,38 @@ void return_from_battle(void) NONBANKED;
 /**
  * Clears all active map sprites.
  */
-void clear_map_sprites(void);
+void clear_map_sprites(void) BANKED;
+
+/**
+ * Loads the torch gauge's colors for the flame the player is carrying into
+ * `TORCH_GAUGE_PALETTE`.
+ *
+ * Whatever borrows that slot while the HUD is hidden gives it back through
+ * here. It is BANKED because the palette table is bank 2 data and
+ * `core.load_sprite_palette()` dereferences the pointer with the caller's bank
+ * mapped, so a caller in another bank would read its own bank's bytes.
+ */
+void reload_torch_gauge_palette(void) BANKED;
 
 /**
  * Initializes the map menu.
  */
-void init_map_menu(void);
+void init_map_menu(void) BANKED;
 
 /**
  * Performs game loop updates for the map menu.
  */
-void update_map_menu(void);
+void update_map_menu(void) BANKED;
 
 /**
  * Updates HP/SP for the map menu.
  */
-void update_map_menu_hp_sp(void);
+void update_map_menu_hp_sp(void) BANKED;
 
 /**
  * Opens the map menu.
  */
-void show_map_menu(void);
-
-/**
- * Closes the map menu.
- */
-void hide_map_menu(void);
+void show_map_menu(void) BANKED;
 
 /**
  * Forces the player to take an exit.
@@ -1405,13 +1468,17 @@ inline bool is_lever_on(LeverId id) {
 }
 
 /**
+ * Fades the map out and rolls the credits (the ending). For floor scripts.
+ */
+void map_start_credits(void) BANKED;
+
+/**
  * Changes the state of the lever to "on". This has no effect on the graphics
  * for the level.
  * @param lever The lever to toggle.
  */
-inline bool toggle_lever_state(LeverId id) {
+inline void toggle_lever_state(LeverId id) {
   flags_lever_on ^= id;
-  *debug = flags_lever_on;
 }
 
 /**

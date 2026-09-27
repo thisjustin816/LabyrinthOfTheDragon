@@ -45,11 +45,11 @@ addNamespace('misc', 0, {
   'zombie': 'Zombie',
   'bugbear': 'Bugbear',
   'owlbear': 'Owlbear',
-  'gelatinous_cube': 'G.Cube',
-  'displacer_beast': 'D.Beast',
-  'will_o_wisp': 'W.O.Wisp',
-  'death_knight': 'D.Knight',
-  'mind_flayer': 'M.Flayer',
+  'gelatinous_cube': 'Gelatinous Cube',
+  'displacer_beast': 'Displacer Beast',
+  'will_o_wisp': 'Will-o-wisp',
+  'death_knight': 'Death Knight',
+  'mind_flayer': 'Mind Flayer',
   'beholder': 'Beholder',
   'dragon': 'Dragon',
   'druid_short':    'DRU',
@@ -99,7 +99,7 @@ addNamespace('battle', 3, {
   'monster_paralyzed': "%monster %c can't move!",
   'monster_poison_death': '%monster %c succumbs to the poison!',
   'monster_confuse_attack_self': 'Confused, %monster %c attacks itself!',
-  'monster_confuse_attack_other': 'Confused, %monster %c attacks any ally!',
+  'monster_confuse_attack_other': 'Confused, %monster %c attacks an ally!',
   'monster_confuse_stupor': '%monster %c stares aimlessly.',
   'monster_lies_prone': '%monster %c lies prone!',
   'monster_gets_up': '%monster %c gets up.',
@@ -111,6 +111,7 @@ addNamespace('battle', 3, {
   'player_prone': 'You lie prone!',
   'player_get_up': 'You get up!',
   'player_paralyzed': 'You are paralyzed and cannot move!',
+  'player_poison_death': 'You succumb to the poison!',
   'player_confused_attack': 'You deal %damage damage to yourself!',
   'player_confused_mumble': 'You mumble some gibberish and giggle a little.',
   'victory': 'Victory! You gain %exp XP!',
@@ -126,6 +127,9 @@ addNamespace('player', 4, {
   'hit_resist': "They resist your attack, only %damage damage...",
   'hit_vuln': "SUPER EFFECTIVE %damage damage!",
   'hit_crit': 'CRITICAL HIT! You deal %damage damage!',
+  'hit_each': 'You deal %damage damage to each!',
+  'hit_two': 'You deal %damage and %damage damage!',
+  'hit_three': 'You deal %damage, %damage, and %damage damage!',
   'heal_hp': 'You heal %damage HP.',
   'heal_crit': 'CRITICAL! You heal a whopping %damage HP!',
   'heal_fumble': 'You only heal a measly %damage HP.',
@@ -134,7 +138,7 @@ addNamespace('player', 4, {
   'poison_spray': 'Poison gas erupts from your palm!',
   'cure_wounds': "You're enveloped in blue light...",
   'bark_skin': 'Your skin grows hard as wood.',
-  'lightning': 'Bolts of lighting fall!',
+  'lightning': 'Bolts of lightning fall!',
   'heal': 'Radiant green light descends...',
   'heal_complete': "You're fully healed!",
   'insect_plague': 'Locusts swarm!',
@@ -154,7 +158,7 @@ addNamespace('player', 4, {
   'monk_open_palm': 'You strike with an open palm!',
   'monk_open_palm_trip': 'You trip %monster %c!',
   'monk_still_mind': 'You become one with the multiverse...',
-  'monk_still_mind_post': 'And are healed of all ill effects!',
+  'monk_still_mind_post': 'Healed of all ills, and beyond fear.',
   'monk_flurry_of_blows': 'You attack with a flurry of blows!',
   'monk_diamond_body': 'You become tough as diamond.',
   'monk_quivering_palm': 'You attack their very essence!',
@@ -174,7 +178,7 @@ addNamespace('player', 4, {
   'sorc_wild_magic_sleetstorm': 'And a sleetstorm descends!',
   // `damage_monster` strings (in player.c)
   'displacer_beast_phase': 'They phase out and evade the attack!',
-  'deathknight_revive': 'The deathknight falls, but then revives!',
+  'deathknight_revive': 'The death knight falls, but then revives!',
 });
 
 addNamespace('maps', 2, {
@@ -217,6 +221,7 @@ addNamespace('floor1', 2, {
   'sign_hidden_passage_hint': 'Check behind you...',
   'sign_missing_elite': 'A powerful foe once lived here.',
   'boss_defeated': "Yawp! You won't beat my friends below!",
+  'intro': 'The tunnel has collapsed behind you! No way back; only down.',
 });
 
 addNamespace('floor2', 2, {
@@ -235,6 +240,7 @@ addNamespace('floor3', 2, {
 });
 
 addNamespace('floor4', 2, {
+  'sign_flames': 'Where a sconce is missing, take its color...',
   'elite_attack': 'KWAAAAAAHHH!',
   'boss': 'NyaAAAHHHH!',
   'boss_not_yet': 'Nya?',
@@ -264,11 +270,13 @@ addNamespace('floor7', 2, {
 addNamespace('floor8', 2, {
   'boss': 'Finally, I have awaited this...',
   'elite': 'STARING EVEN MORE',
+  'stairs_open': 'The dragon is slain! An ancient stairway opens above.',
   'healing_mirror': 'You look in the mirror and your wounds vanish!',
   'healing_mirror_none': 'The mirror has lost its luster...',
 });
 
 addNamespace('floor_common', 2, {
+  'another_lever': "Another lever still holds this door!",
   'growl': "GROWL!",
   'light_fires': "Light these fires to open this door!",
   'missing': "Something used to have been here...",
@@ -279,6 +287,7 @@ addNamespace('floor_common', 2, {
   'fight_me': "Fight Me!",
   'love': "I LOVE YOU!",
   'strange_wind': "You feel a strong breeze from the north.",
+  'learned_all': "You've learned all it can teach.",
 })
 
 function grant_ability_str(name, cast=true) {
@@ -313,13 +322,11 @@ addNamespace('gain_ability', 2, {
 addNamespace('chest_item', 2, {
   '2pot_1eth': 'You get 2 potions and an ether!',
   '1pot': 'You get a potion!',
-  '1pots': 'You get a potions!',
   'haste_pot': 'You get a haste potion!',
   'regen_pot': 'You get a regen potion!',
   '3regen': 'You get 3 regens!',
   '2pots': 'You get 2 potions!',
   '1eth': 'You get an ether!',
-  '1eths': 'You get an ethers!',
   '1remedy': 'You get a remedy!',
   '3potions': 'You get 3 potions!',
   '3ethers': 'You get 3 ethers!',
@@ -327,6 +334,7 @@ addNamespace('chest_item', 2, {
   '1atkup_1defup': 'You get an ATK& and DEF&!',
   '3elixirs': 'You get 3 elixirs!',
   '3haste': 'You get 3 haste potions!',
+  'haste_atkup_defup': 'You get a haste potion, an ATK&, and a DEF&!',
 });
 
 addNamespace('items', 3, {
@@ -339,7 +347,7 @@ addNamespace('items', 3, {
   'use_elixir': 'You fully heal!',
   'use_regen': 'You begin regenerating!',
   'use_haste': 'The world slows down!',
-  'use_failed': "The item didn't work!",
+  'use_failed': "You don't need it, so you keep it.",
 })
 
 addNamespace('monster', 6, {
@@ -352,7 +360,7 @@ addNamespace('monster', 6, {
   'hit': 'You take %damage damage!',
   'hit_aspect': 'You take %damage %aspect damage!',
   'hit_immune': "But you're completely immune!",
-  'hit_resist': 'You resist, only %damage damage',
+  'hit_resist': 'You resist, only %damage damage...',
   'hit_vuln': "It's SUPER BAD! %damage damage!",
   'hit_crit': 'CRITICAL HIT! You take %damage damage!',
   'hit_barkskin': 'Your barkskin protects you! %damage damage.',
@@ -377,7 +385,7 @@ addNamespace('monster', 6, {
   'zombie_slam': "Zombie %c swipes at you!",
   // Bugbear special
   'bugbear_for_hruggek': 'Bugbear %c screams "FOR HRUGGEK!"',
-  'bugbear_for_hruggek_hit': 'You shiver with fear!',
+  'bugbear_for_hruggek_hit': 'Terror grips you!',
   'bugbear_for_hruggek_miss': 'You are unimpressed.',
   'bugbear_javelin': 'Bugbear %c throws a javelin!',
   'bugbead_club': 'Bugbear %c swings a club!',
@@ -449,7 +457,7 @@ addNamespace('monster2', 7, {
   'dragon_legendary_wing_miss': 'But you take cover!',
   'dragon_legendary_wing_hit': 'You are toppled and take %damage damage!',
   'dragon_fright': 'Dragon %c towers above you!',
-  'dragon_fright_miss': 'But your resolve does not waiver!',
+  'dragon_fright_miss': 'But your resolve does not waver!',
   'dragon_fright_hit': 'And you fear for your life!',
   'dragon_fire_breath': 'Dragon %c exhales a wave of fire!',
   'dragon_fire_breath_miss': 'You dodge, but still take %damage damage!',
@@ -469,7 +477,7 @@ addNamespace('credits', 1, {
 
   'story3_1': 'And at long last...',
   'story3_2': 'was free of the',
-  'story3_3': 'The dungeon and',
+  'story3_3': 'dungeon and',
   'story3_4': '   the dragon.',
 
   'developed_by': 'DEVELOPED BY',
@@ -488,6 +496,9 @@ addNamespace('credits', 1, {
   'nh_patreon': 'NesHacker Patreon',
   'nh_patreon2': 'patreon.com/',
   'nh_patreon3': '   NesHacker',
+
+  'fork': '1.1 FORK',
+  'fork_by': 'thisJUSTin816',
 
   'thank_you': 'Thank you',
   'for_playing': 'for playing!',

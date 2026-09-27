@@ -62,6 +62,7 @@ void monster_init_instance(
   monster->aspect_resist = 0;
   monster->aspect_vuln = 0;
   monster->debuff_immune = 0;
+  monster->special_immune = 0;
   monster->can_flee = true;
   monster->fled = false;
   monster->parameter = 0;
@@ -76,7 +77,7 @@ uint16_t damage_player(uint16_t base_damage, DamageAspect type) BANKED {
 
   if (player.special_flags & SPECIAL_EVASION) {
     uint8_t evade_chance = 4;
-    if (player.level > 70)
+    if (player.level > 54)
       evade_chance = 6;
     else if (player.level > 30)
       evade_chance = 5;
@@ -142,7 +143,7 @@ void monster_flee(Monster *monster) BANKED {
     monster->id
   );
 
-  if (roll_flee(monster->agl, player.agl))
+  if (monster->can_flee && roll_flee(monster->agl, player.agl))
     MONSTER_FLEE(monster);
   else
     MONSTER_FLEE_FAIL(monster);

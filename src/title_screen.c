@@ -6,7 +6,9 @@
 
 #include "core.h"
 #include "hero_select.h"
+#include "main_menu.h"
 #include "sound.h"
+#include "title_screen.h"
 
 #define MAX_ANIMATION_SPRITES 20
 
@@ -17,7 +19,7 @@ void init_neshacker_presents(void);
 void update_neshacker_presents(void);
 
 void init_main_title(void);
-void update_main_title(void);
+void update_main_title(void) NONBANKED;
 
 void init_fire_animation(void);
 void update_fire_animation(void);
@@ -94,6 +96,25 @@ void init_title_screen(void) BANKED {
 
   init_neshacker_presents();
   title_state = TITLE_NESHACKER_PRESENTS;
+
+  DISPLAY_ON;
+}
+
+void return_to_title_screen(void) BANKED {
+  DISPLAY_OFF;
+
+  scroll_bkg(0, 0);
+  core.load_bg_palette(default_palette, 0, 8);
+  core.load_sprite_palette(default_palette, 0, 8);
+  core.fill_bg(0xFF, 0b00001010);
+  core.fill(VRAM_WINDOW, 32, 32, 0xFF, 0b00001010);
+  core.load_title_tiles();
+  core.draw_tilemap(title_screen_tilemap, VRAM_BACKGROUND);
+  clear_sprites();
+
+  // Straight to the main title; the studio card has already played once.
+  title_state = TITLE_MAIN;
+  init_main_title();
 
   DISPLAY_ON;
 }
@@ -415,6 +436,8 @@ static const palette_color_t main_bg_palettes[] = {
   RGB8(251, 242, 54), RGB_BLACK, RGB_BLACK, RGB_BLACK,
 };
 
+#define PRESS_START_PALETTE 5
+
 static const palette_color_t dragon_palette_frames[] = {
   // FRAME 1 -------------------------------------------------------------------
   // Palette 2 - Face
@@ -444,7 +467,10 @@ Timer flame_palette_timer;
 
 void init_main_title(void) {
   move_win(0, 144);
-  core.load_bg_palette(main_bg_palettes, 0, 6);
+  // PRESS START stays black through the fire, which ignores START, and
+  // update_fire_animation lights it once the button is read.
+  core.load_bg_palette(main_bg_palettes, 0, 5);
+  core.load_bg_palette(default_palette, PRESS_START_PALETTE, 1);
   core.load_sprite_palette(main_fg_palettes, 0, 2);
 
   play_sound(sfx_title_fire);
@@ -474,8 +500,8 @@ void update_main_title(void) NONBANKED {
     if (was_pressed(J_START)) {
       DISPLAY_OFF;
       clear_sprites();
-      game_state = GAME_STATE_HERO_SELECT;
-      init_hero_select();
+      game_state = GAME_STATE_SAVE_SELECT;
+      init_save_select();
       return;
     }
 
@@ -569,6 +595,8 @@ void update_fire_animation(void) {
     fire_frame_idx = END;
     clear_sprites();
     init_smoke_animation();
+    core.load_bg_palette(
+      main_bg_palettes + 4 * PRESS_START_PALETTE, PRESS_START_PALETTE, 1);
     main_title_state = MAIN_WAIT_FOR_INPUT;
     return;
   }

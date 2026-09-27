@@ -51,7 +51,22 @@ extern TextBox textbox;
 
 /**
  * Palette used by the text box.
+ *
+ * This is bank 2 data, so only bank 2 code can hand the pointer to
+ * `core.load_bg_palette()`. Callers elsewhere use
+ * `reload_textbox_palette()`.
  */
 extern const palette_color_t textbox_palette[4];
+
+/**
+ * Loads the text box's palette back into BG palette 7.
+ *
+ * Whatever borrows that slot while the box is hidden gives it back through
+ * here. `core.load_bg_palette()` lives in ROM0 and dereferences the palette
+ * pointer with the caller's bank still mapped, so a caller in another bank
+ * reads its own bank at `textbox_palette`'s address and loads whatever happens
+ * to sit there. Being BANKED, this function switches to bank 2 first.
+ */
+void reload_textbox_palette(void) BANKED;
 
 #endif

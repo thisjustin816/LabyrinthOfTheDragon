@@ -1,8 +1,8 @@
 #pragma bank 8
 
 #include "core.h"
-#include "credits.h"
 #include "floor.h"
+#include "save.h"
 #include "sound.h"
 
 //------------------------------------------------------------------------------
@@ -33,6 +33,47 @@ typedef enum HealingMirrorId {
   MIRROR_6 = FLAG(5),
 } HealingMirrorId;
 
+typedef struct HealingMirror {
+  HealingMirrorId id;
+  // The tile in front of the mirror, which hangs on the wall above it.
+  uint8_t x, y;
+} HealingMirror;
+
+#define HEALING_MIRROR_COUNT 6
+
+static const HealingMirror healing_mirrors[HEALING_MIRROR_COUNT] = {
+  { MIRROR_1, 5, 27 },
+  { MIRROR_2, 11, 27 },
+  { MIRROR_3, 5, 22 },
+  { MIRROR_4, 11, 22 },
+  { MIRROR_5, 19, 10 },
+  { MIRROR_6, 23, 10 },
+};
+
+// The gauntlet hall: the bosses of floors 1 to 6, each waiting on a tile in
+// front of an alcove's chest. Stepping onto one plays the roar and the line it
+// met the hero with on its own floor, then starts the fight. The map draws a
+// pile of bones on each of those tiles in the bright bone palette, and a win
+// repaints them in the floor's own palette.
+typedef struct GauntletFight {
+  MiniBoss boss;
+  uint8_t x, y;
+  const char *line;
+  void (*roar)(void);
+} GauntletFight;
+
+#define GAUNTLET_FIGHT_COUNT 6
+#define FLOOR_PALETTE 2
+
+static const GauntletFight gauntlet[GAUNTLET_FIGHT_COUNT] = {
+  { MINI_BOSS_GOBLIN, 2, 27, str_floor_common_growl, sfx_monster_attack1 },
+  { MINI_BOSS_OWLBEAR, 14, 27, str_floor2_boss_msg, sfx_monster_attack2 },
+  { MINI_BOSS_GCUBE, 3, 22, str_floor3_boss, sfx_monster_attack2 },
+  { MINI_BOSS_DBEAST, 13, 22, str_floor4_boss, sfx_monster_attack2 },
+  { MINI_BOSS_DKNIGHT, 4, 17, str_floor5_boss, sfx_monster_attack2 },
+  { MINI_BOSS_MFLAYER, 12, 17, str_floor6_boss, sfx_monster_attack2 },
+};
+
 uint8_t mini_bosses_defeated = 0;
 uint8_t current_mini_boss = 0;
 uint8_t healing_mirrors_used = 0;
@@ -41,21 +82,40 @@ inline bool is_healing_mirror_used(HealingMirrorId id) {
   return healing_mirrors_used & id;
 }
 
+inline void dull_healing_mirror(const HealingMirror *mirror) {
+  set_palette_at(MAP_A, mirror->x, mirror->y - 1, 4);
+}
+
 inline bool has_beaten(MiniBoss b) {
   return mini_bosses_defeated & b;
 }
 
-inline bool set_beaten(MiniBoss b) {
+inline void set_beaten(MiniBoss b) {
   mini_bosses_defeated |= b;
-  *(debug + 0x20) = mini_bosses_defeated;
 }
 
 inline bool all_bosses_beaten(void) {
   return mini_bosses_defeated == MINI_BOSS_ALL;
 }
 
+/**
+ * @return The gauntlet fight for the given boss, or `NULL` for the beholder.
+ */
+static const GauntletFight *gauntlet_fight(MiniBoss b) {
+  const GauntletFight *fight = gauntlet;
+  for (uint8_t k = 0; k < GAUNTLET_FIGHT_COUNT; k++, fight++) {
+    if (fight->boss == b)
+      return fight;
+  }
+  return NULL;
+}
+
 static void on_mini_boss_victory(void) BANKED {
   set_beaten(current_mini_boss);
+
+  const GauntletFight *fight = gauntlet_fight(current_mini_boss);
+  if (fight)
+    set_palette_at(MAP_A, fight->x, fight->y, FLOOR_PALETTE);
 
   switch (current_mini_boss) {
   case MINI_BOSS_GOBLIN:
@@ -123,6 +183,7 @@ static void mini_boss_encounter(MiniBoss b) {
   }
 
   monster->id = 'A';
+  monster->can_flee = false;
 
   current_mini_boss = b;
   set_on_victory(on_mini_boss_victory);
@@ -178,6 +239,7 @@ static const Chest chests[] = {
     MAP_A, 3, 21,
     false, false,
     str_chest_item_1atkup_1defup,
+    chest_item_1atkup_1defup,
   },
   {
     CHEST_4,
@@ -211,7 +273,7 @@ static const Chest chests[] = {
     CHEST_8,
     MAP_A, 22, 9,
     false, false,
-    str_chest_item_1pots,
+    str_chest_item_1pot,
     chest_item_1pot,
   },
   { END },
@@ -327,7 +389,7 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 static void on_elite_victory(void) BANKED {
   current_mini_boss = MINI_BOSS_BEHOLDER;
@@ -335,21 +397,49 @@ static void on_elite_victory(void) BANKED {
   set_npc_invisible(NPC_2);
 }
 
-static bool on_boss_encouter(void) {
+/**
+ * The dragon is dead: it leaves the chamber and the staircase door behind it
+ * opens. Stepping onto the stairs finishes the game (see `on_move`).
+ */
+static void on_dragon_victory(void) BANKED {
+  set_npc_invisible(NPC_1);
+  open_door(DOOR_2);
+  play_sound(sfx_big_door_open);
+  map_textbox(str_floor8_stairs_open);
+}
+
+static bool on_boss_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   dragon_generator(monster, 60, A_TIER);
+
+  // The dragon fights at A-tier but carries the S-tier HP row. Three of the
+  // four classes' finishers out-damage the A-tier row in a single cast, so the
+  // fight ends before the legendary actions it is built around ever come up.
+  // Moving only the HP buys a second beat without changing what the dragon can
+  // do back: its damage, its legendary charge count and its XP reward all read
+  // exp_tier, which stays A_TIER.
+  //
+  // monster_reset_stats() re-derives target_hp from hp. The HP bar animates
+  // toward target_hp rather than hp, so setting the two HP fields alone would
+  // leave the bar chasing the old value.
+  monster->max_hp = get_monster_hp(60 + 20, S_TIER);
+  monster->hp = monster->max_hp;
+  monster_reset_stats(monster);
+
   monster->id = 'A';
-  encounter.is_final_boss = true;
+  monster->can_flee = false;
+  set_on_victory(on_dragon_victory);
   start_battle();
   return true;
 }
 
-static bool on_elite_encouter(void) {
+static bool on_elite_encounter(void) {
   Monster *monster = encounter.monsters;
   reset_encounter(MONSTER_LAYOUT_1);
   beholder_generator(monster, 55, B_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(on_elite_victory);
   start_battle();
   return true;
@@ -359,11 +449,11 @@ static bool on_npc_action(const NPC *npc) {
   switch (npc->id) {
   case NPC_1:
     play_sound(sfx_monster_attack2);
-    map_textbox_with_action(str_floor8_boss, on_boss_encouter);
+    map_textbox_with_action(str_floor8_boss, on_boss_encounter);
     return true;
   case NPC_2:
     play_sound(sfx_monster_attack1);
-    map_textbox_with_action(str_floor8_elite, on_elite_encouter);
+    map_textbox_with_action(str_floor8_elite, on_elite_encounter);
     return true;
   }
   return false;
@@ -391,76 +481,71 @@ static const NPC npcs[] = {
 
 static bool on_init(void) {
   mini_bosses_defeated = 0;
-  return false;
-}
 
-inline bool check_mini_boss_tile(MiniBoss b, uint8_t x, uint8_t y) {
-  if (player_at(x, y) && !has_beaten(b)) {
-    mini_boss_encounter(b);
-    return true;
+  // A mirror stays used after a death, but the floor's reload clears the
+  // palette that showed it, so a spent mirror would look new again.
+  for (uint8_t k = 0; k < HEALING_MIRROR_COUNT; k++) {
+    if (is_healing_mirror_used(healing_mirrors[k].id))
+      dull_healing_mirror(healing_mirrors + k);
   }
   return false;
 }
 
-inline bool use_healing_mirror(HealingMirrorId id) {
-  healing_mirrors_used |= id;
+static bool start_gauntlet_fight(void) {
+  mini_boss_encounter(current_mini_boss);
+  return true;
 }
 
-
-bool check_healing_mirror(HealingMirrorId id, uint8_t x, uint8_t y) {
-  if (!player_at_facing(x, y, UP))
+static bool check_healing_mirror(const HealingMirror *mirror) {
+  if (!player_at_facing(mirror->x, mirror->y, UP))
     return false;
 
-  if (is_healing_mirror_used(id)) {
+  if (is_healing_mirror_used(mirror->id)) {
     map_textbox(str_floor8_healing_mirror_none);
     return true;
   }
 
   full_heal_player();
-  healing_mirrors_used |= id;
+  healing_mirrors_used |= mirror->id;
 
   map_textbox(str_floor8_healing_mirror);
   play_sound(sfx_big_powerup);
-  set_palette_at(MAP_A, x, y - 1, 4);
+  dull_healing_mirror(mirror);
 
   return true;
 }
 
 static bool on_special(void) {
-  if (check_mini_boss_tile(MINI_BOSS_GOBLIN, 2, 27))
+  const GauntletFight *fight = gauntlet;
+  for (uint8_t k = 0; k < GAUNTLET_FIGHT_COUNT; k++, fight++) {
+    if (!player_at(fight->x, fight->y) || has_beaten(fight->boss))
+      continue;
+    current_mini_boss = fight->boss;
+    play_sound(fight->roar);
+    map_textbox_with_action(fight->line, start_gauntlet_fight);
     return true;
-  if (check_mini_boss_tile(MINI_BOSS_OWLBEAR, 14, 27))
-    return true;
-  if (check_mini_boss_tile(MINI_BOSS_GCUBE, 3, 22))
-    return true;
-  if (check_mini_boss_tile(MINI_BOSS_DBEAST, 13, 22))
-    return true;
-  if (check_mini_boss_tile(MINI_BOSS_DKNIGHT, 4, 17))
-    return true;
-  if (check_mini_boss_tile(MINI_BOSS_MFLAYER, 12, 17))
-    return true;
-
+  }
   return false;
 }
 
 static bool on_move(void) {
+  // The staircase behind the dragon (an open door tile, so it never reaches
+  // on_special): mark the game cleared, save it to the slot so the save select
+  // shows it, and roll the credits.
+  if (player_at(8, 1) && is_door_open(DOOR_2)) {
+    set_flags(FLAGS_GAME, FLAG_GAME_COMPLETE);
+    save_write(active_save_slot);
+    map_start_credits();
+    return true;
+  }
   return false;
 }
 
 static bool on_action(void) {
-  if (check_healing_mirror(MIRROR_1, 5, 27))
-    return true;
-  if (check_healing_mirror(MIRROR_2, 11, 27))
-    return true;
-  if (check_healing_mirror(MIRROR_3, 5, 22))
-    return true;
-  if (check_healing_mirror(MIRROR_4, 11, 22))
-    return true;
-  if (check_healing_mirror(MIRROR_5, 19, 10))
-    return true;
-  if (check_healing_mirror(MIRROR_6, 23, 10))
-    return true;
-
+  for (uint8_t k = 0; k < HEALING_MIRROR_COUNT; k++) {
+    if (check_healing_mirror(healing_mirrors + k))
+      return true;
+  }
   return false;
 }
 
@@ -485,20 +570,21 @@ static const palette_color_t palettes[] = {
   RGB8(40, 0, 0),
   RGB8(24, 0, 0),
   // Palette 4 - Healing Mirror Full
-  RGB8(00, 160, 90),
+  RGB8(120, 200, 248),
   RGB8(80, 20, 20),
   RGB8(40, 0, 0),
   RGB8(24, 0, 0),
-  // Palette 5 - Heling Mirror Empty
+  // Palette 5 - Healing Mirror Empty
   RGB8(40, 20, 20),
   RGB8(80, 20, 20),
   RGB8(40, 0, 0),
   RGB8(24, 0, 0),
-  // Palette 6
-  RGB_WHITE,
-  RGB8(120, 120, 120),
-  RGB8(60, 60, 60),
-  RGB_BLACK,
+  // Palette 6 - Bones on the gauntlet's waiting fights: the floor's colors,
+  // with bone white in the slot the floor uses only for rare highlights
+  RGB8(200, 190, 150),
+  RGB8(60, 40, 40),
+  RGB8(40, 0, 0),
+  RGB8(24, 0, 0),
   // Palette 7
   RGB_WHITE,
   RGB8(120, 120, 120),

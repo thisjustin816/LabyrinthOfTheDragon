@@ -7,33 +7,41 @@
 #include "credits.h"
 #include "core.h"
 #include "hero_select.h"
+#include "main_menu.h"
 #include "map.h"
+#include "name_entry.h"
 #include "sound.h"
 #include "stats.h"
 #include "test.h"
 #include "title_screen.h"
 
 GameState game_state = GAME_STATE_TITLE;
+uint16_t play_seconds;
+
+/**
+ * VBlank counter used to drive `play_seconds`.
+ */
+static uint8_t play_frames;
+
 uint8_t joypad_down;
 uint8_t joypad_pressed;
 uint8_t joypad_released;
 
 /**
- * Enumerates initial game modes. These are used in testing and development to
- * immediately jump to a specific test state.
+ * Initial game modes. The test modes jump straight to a development state.
  */
-typedef enum InitialGameMode {
-  GAME_MODE_NORMAL,
-  GAME_MODE_HERO_SELECT,
-  GAME_MODE_TEST_LEVEL,
-  GAME_MODE_TEST_BATTLE,
-  GAME_MODE_TEST_CREDITS,
-} InitialGameMode;
+#define GAME_MODE_NORMAL 1
+#define GAME_MODE_HERO_SELECT 2
+#define GAME_MODE_TEST_LEVEL 3
+#define GAME_MODE_TEST_BATTLE 4
+#define GAME_MODE_TEST_CREDITS 5
 
 /**
- * Determines the initial game mode for the game.
+ * Selects the initial game mode, one of the GAME_MODE_* values above. A switch
+ * on a const variable would compile the other modes as unreachable code, which
+ * SDCC warns about, so the preprocessor picks the mode.
  */
-const InitialGameMode initial_mode = GAME_MODE_NORMAL;
+#define INITIAL_MODE GAME_MODE_NORMAL
 
 /**
  * Uncomment to enable sound effect testing when pressing the 'B' button.
@@ -41,39 +49,35 @@ const InitialGameMode initial_mode = GAME_MODE_NORMAL;
 // #define SFX_TEST
 
 /**
- * Random Seed to use for the game. If set to 0 then the game will generate a
- * seed value on the title while waiting for the player to begin the game.
+ * Random seed for the game. At 0, every frame on the title, file, hero, and
+ * name screens adds to the running count (map.c's new_seed) that seeds the
+ * dice on a map's first move. Any other value seeds the dice with it at
+ * power-on and leaves those screens out of the count.
  */
-#define RANDOM_SEED 50
+#define RANDOM_SEED 0
 
 /**
  * Initializes the core game engine.
  */
 static inline void initialize(void) {
-  ENABLE_RAM;
-
   initarand(RANDOM_SEED);
   hide_window();
 
-  switch (initial_mode) {
-  case GAME_MODE_NORMAL:
-    init_title_screen();
-    game_state = GAME_STATE_TITLE;
-    break;
-  case GAME_MODE_HERO_SELECT:
-    init_hero_select();
-    game_state = GAME_STATE_HERO_SELECT;
-    break;
-  case GAME_MODE_TEST_LEVEL:
-    test_level();
-    break;
-  case GAME_MODE_TEST_BATTLE:
-    test_battle();
-    break;
-  case GAME_MODE_TEST_CREDITS:
-    init_credits();
-    break;
-  }
+#if INITIAL_MODE == GAME_MODE_NORMAL
+  init_title_screen();
+  game_state = GAME_STATE_TITLE;
+#elif INITIAL_MODE == GAME_MODE_HERO_SELECT
+  init_hero_select();
+  game_state = GAME_STATE_HERO_SELECT;
+#elif INITIAL_MODE == GAME_MODE_TEST_LEVEL
+  test_level();
+#elif INITIAL_MODE == GAME_MODE_TEST_BATTLE
+  test_battle();
+#elif INITIAL_MODE == GAME_MODE_TEST_CREDITS
+  init_credits();
+#else
+#error "INITIAL_MODE must be one of the GAME_MODE_* values"
+#endif
 }
 
 /**
@@ -83,6 +87,9 @@ static inline void game_loop(void) {
   switch (game_state) {
   case GAME_STATE_TITLE:
     update_title_screen();
+    break;
+  case GAME_STATE_SAVE_SELECT:
+    update_save_select();
     break;
   case GAME_STATE_HERO_SELECT:
     update_hero_select();
@@ -96,7 +103,27 @@ static inline void game_loop(void) {
   case GAME_STATE_CREDITS:
     update_credits();
     break;
+  case GAME_STATE_NAME_ENTRY:
+    update_name_entry();
+    break;
   }
+}
+
+/**
+ * Counts a frame on the screens before play toward the map's seed, when
+ * RANDOM_SEED is 0.
+ */
+static inline void count_seed_frame(void) {
+#if RANDOM_SEED == 0
+  switch (game_state) {
+  case GAME_STATE_TITLE:
+  case GAME_STATE_SAVE_SELECT:
+  case GAME_STATE_HERO_SELECT:
+  case GAME_STATE_NAME_ENTRY:
+    new_seed++;
+    break;
+  }
+#endif
 }
 
 /**
@@ -160,8 +187,17 @@ void main(void) {
       play_sound(sfx_test);
     #endif
 
+    count_seed_frame();
     game_loop();
     vsync();
+
+    // ~59.7 VBlanks per second on a CGB; close enough for a play clock.
+    if (++play_frames >= 60) {
+      play_frames = 0;
+      if (play_seconds < 0xFFFF)
+        play_seconds++;
+    }
+
     render();
   }
 }

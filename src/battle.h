@@ -145,6 +145,11 @@
 #define SUBMENU_TEXT_X 1
 
 /**
+ * Entries a submenu shows at once; longer lists scroll.
+ */
+#define SUBMENU_ROWS 4
+
+/**
  * Tile with full pips for the HP bar.
  */
 #define HP_BAR_FULL_PIPS 0x58
@@ -195,7 +200,7 @@ typedef enum BattleState {
    */
   BATTLE_NEXT_TURN,
   /**
-   * Enitity status effects are updated, effects applied, and messages provided
+   * Entity status effects are updated, effects applied, and messages provided
    * for specific actions (e.g. effect falls off, regen health, etc.)
    */
   BATTLE_UPDATE_STATUS_EFFECTS,
@@ -242,7 +247,7 @@ typedef enum BattleState {
    */
   BATTLE_UI_UPDATE,
   /**
-   * Battle is over and successful, calulates & displays rewards, etc.
+   * Battle is over and successful, calculates & displays rewards, etc.
    */
   BATTLE_SUCCESS,
   /**
@@ -331,10 +336,13 @@ typedef struct BattleMenu {
   uint8_t scroll;
   uint8_t max_scroll;
   const Ability *active_ability;
-  char ability_text[MAX_ABILITIES][18];
-  char item_text[INVENTORY_LEN][18];
+  // 18 visible characters plus the terminating NUL that sprintf writes.
+  char ability_text[MAX_ABILITIES][19];
+  char item_text[INVENTORY_LEN][19];
   ItemId item_at[INVENTORY_LEN];
   uint8_t inventory_entries;
+  // The monster the last single-target command was aimed at.
+  BattleScreenCursor last_target;
 } BattleMenu;
 
 typedef enum AnimationState {
@@ -419,7 +427,7 @@ extern BattleMenu battle_menu;
 /**
  * Initializes the battle system.
  */
-void init_battle(void);
+void init_battle(void) NONBANKED;
 
 /**
  * Executed when battle is complete and before transitioning back to map mode.
@@ -429,12 +437,12 @@ void cleanup_battle(void);
 /**
  * Game loop update for the battle system.
  */
-void update_battle(void);
+void update_battle(void) NONBANKED;
 
 /**
  * VBLANK draw updates for the battle system.
  */
-void draw_battle(void);
+void draw_battle(void) NONBANKED;
 
 /**
  * Shows the battle text box.

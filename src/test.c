@@ -10,6 +10,7 @@
 #include "map.h"
 #include "sound.h"
 #include "stats.h"
+#include "test.h"
 
 #define SET_MAGIC_KEYS(n) do { \
     player.got_magic_key = true; \

@@ -27,17 +27,22 @@ static void mindflayer_take_turn(Monster *monster) {
     sprintf(battle_pre_message,
       str_monster2_mindflayer_mind_blast, monster->id);
 
-    if (player.debuff_immune & DEBUFF_CONFUSED) {
+    if (player.debuff_immune & FLAG_DEBUFF_CONFUSED) {
       monster->parameter |= MIND_FLAYER_MIND_BLAST;
       sprintf(battle_post_message, str_monster2_mindflayer_mind_blast_miss);
       SFX_MISS;
     } else if (roll_attack_monster(monster->matk, player.mdef)) {
-      monster->parameter |= MIND_FLAYER_MIND_BLAST;
       uint16_t damage = damage_player(base_damage / 2, DAMAGE_MAGICAL);
-      sprintf(
-        battle_post_message, str_monster2_mindflayer_mind_blast_hit, damage);
-      apply_confused(
-        encounter.player_status_effects, tier, 3, player.debuff_immune);
+      // A zero is a blast the monk's Evasion dodged, which damage_player() has
+      // already announced. Treat it as the miss below: no confusion, and the
+      // flayer may try again.
+      if (damage > 0) {
+        monster->parameter |= MIND_FLAYER_MIND_BLAST;
+        sprintf(
+          battle_post_message, str_monster2_mindflayer_mind_blast_hit, damage);
+        apply_confused(
+          encounter.player_status_effects, tier, 3, player.debuff_immune);
+      }
     } else {
       sprintf(battle_post_message, str_monster2_monster_miss);
       SFX_FAIL;
@@ -82,9 +87,10 @@ void mindflayer_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
     m, MONSTER_MINDFLAYER, str_misc_mind_flayer, &mindflayer_tileset,
     level, tier);
 
-  m->max_hp = get_monster_hp(level_offset(level, 10), S_TIER);
-  m->atk = get_monster_atk(level_offset(level, 5), tier);
-  m->mdef = get_monster_def(level_offset(level, 5), tier);
+  m->max_hp = get_monster_hp(level_offset(level, 10), tier);
+  m->hp = m->max_hp;
+  m->atk_base = get_monster_atk(level_offset(level, 5), tier);
+  m->mdef_base = get_monster_def(level_offset(level, 5), tier);
   m->aspect_resist |= DAMAGE_MAGICAL;
 
   m->palette = mindflayer_palettes + tier * 4;
@@ -126,24 +132,28 @@ static void beholder_take_turn(Monster *monster) {
       return;
     }
 
-    monster->parameter--;
-
     const uint8_t ray_type = d8();
 
     const PowerTier ray_tiers[4] = { B_TIER, A_TIER, A_TIER, S_TIER };
     const uint16_t base_damage = get_monster_dmg(
       monster->level, ray_tiers[exp_tier]);
 
-    switch (ray_type) {
-    case BEHOLDER_ICE:
-      damage_player(base_damage, DAMAGE_WATER);
-      return;
-    case BEHOLDER_FIRE:
-      damage_player(base_damage, DAMAGE_FIRE);
-      return;
-    }
+    DamageAspect aspect = DAMAGE_MAGICAL;
+    if (ray_type == BEHOLDER_ICE)
+      aspect = DAMAGE_WATER;
+    else if (ray_type == BEHOLDER_FIRE)
+      aspect = DAMAGE_FIRE;
 
-    uint16_t damage = damage_player(base_damage, DAMAGE_MAGICAL);
+    uint16_t damage = damage_player(base_damage, aspect);
+    // A zero is a ray the monk's Evasion dodged, which damage_player() has
+    // already announced. Like a miss, a dodged ray carries none of its effects
+    // and keeps its charge.
+    if (damage == 0)
+      return;
+    monster->parameter--;
+    if (ray_type == BEHOLDER_ICE || ray_type == BEHOLDER_FIRE)
+      return;
+
     StatusEffectResult debuff_result = STATUS_RESULT_FAILED;
 
     switch (ray_type) {
@@ -247,9 +257,10 @@ void beholder_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
   m->exp_level = level_offset(level, 10);
 
   m->max_hp = get_monster_hp(level_offset(level, 10), tier);
-  m->atk = get_monster_atk(level_offset(level, 5), tier);
-  m->matk = get_monster_atk(level_offset(level, 7), tier);
-  m->agl = get_agl(level_offset(level, -4), tier);
+  m->hp = m->max_hp;
+  m->atk_base = get_monster_atk(level_offset(level, 5), tier);
+  m->matk_base = get_monster_atk(level_offset(level, 7), tier);
+  m->agl_base = get_agl(level_offset(level, -4), tier);
 
   const uint8_t eye_ray_tries[4] = { 1, 2, 3, 4 };
   m->parameter = eye_ray_tries[m->exp_tier];
@@ -265,7 +276,7 @@ void beholder_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
 #define DRAGON_FRIGHT_MASK     0b00001100
 #define DRAGON_LEGEND_MASK     0b00000011
 
-inline uint8_t init_dragon_parameter(
+inline void init_dragon_parameter(
   Monster *m,
   bool firebreath,
   uint8_t fright_actions,
@@ -325,10 +336,13 @@ static void dragon_take_turn(Monster *monster) {
       sprintf(
         battle_pre_message, str_monster2_dragon_legendary_tail, monster->id);
       if (hit) {
-        damage_player(
+        uint16_t damage = damage_player(
           4 * get_monster_dmg(monster->level, monster->exp_tier),
           DAMAGE_PHYSICAL
         );
+        // A zero is Evasion's dodge, already announced; no extra flourish.
+        if (damage > 0)
+          UNLESS_CRITICAL(SFX_SPECIAL_CRIT);
       } else {
         sprintf(battle_post_message, str_monster2_dragon_legendary_tail_miss);
         SFX_MISS;
@@ -342,12 +356,16 @@ static void dragon_take_turn(Monster *monster) {
           get_monster_dmg(monster->level, monster->exp_tier),
           DAMAGE_PHYSICAL
         );
-        player.trip_turns = 1;
-        sprintf(
-          battle_post_message,
-          str_monster2_dragon_legendary_wing_hit,
-          wing_damage
-        );
+        // A zero is Evasion's dodge, already announced; it topples nobody.
+        if (wing_damage > 0) {
+          player.trip_turns = 1;
+          sprintf(
+            battle_post_message,
+            str_monster2_dragon_legendary_wing_hit,
+            wing_damage
+          );
+          UNLESS_CRITICAL(SFX_SPECIAL_CRIT);
+        }
       } else {
         sprintf(battle_post_message, str_monster2_dragon_legendary_wing_miss);
         SFX_MISS;
@@ -404,8 +422,15 @@ static void dragon_take_turn(Monster *monster) {
       base_damage /= 2;
 
     uint16_t damage = damage_player(base_damage, DAMAGE_FIRE);
-    if (hit)
+    // Zero is an evaded hit, which damage_player() has already announced.
+    if (damage == 0)
       return;
+    // A landed breath roars with the title screen's fire, over the hit or
+    // critical sound damage_player() picked.
+    if (hit) {
+      SFX_FIRE;
+      return;
+    }
 
     sprintf(battle_post_message, str_monster2_dragon_fire_breath_miss, damage);
     SFX_MISS;
@@ -432,6 +457,9 @@ static void dragon_take_turn(Monster *monster) {
 
   base_damage *= hits;
   uint16_t damage = damage_player(base_damage, DAMAGE_PHYSICAL);
+  // Zero is an evaded hit, which damage_player() has already announced.
+  if (damage == 0)
+    return;
 
   if (hits == 3)
     sprintf(battle_post_message, str_monster2_dragon_hit_triple, damage);
@@ -439,8 +467,6 @@ static void dragon_take_turn(Monster *monster) {
     sprintf(battle_post_message, str_monster2_dragon_hit_double, damage);
   else
     sprintf(battle_post_message, str_monster2_dragon_hit_single, damage);
-
-  SFX_MELEE;
 }
 
 void dragon_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
@@ -452,6 +478,7 @@ void dragon_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
   m->take_turn = dragon_take_turn;
 
   m->exp_level = level_offset(level, 20);
+  m->special_immune = SPECIAL_INSTANT_KILL | SPECIAL_TRIP;
   m->max_hp = get_monster_hp(level_offset(level, 20), tier);
   m->hp = m->max_hp;
 

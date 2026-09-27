@@ -11,6 +11,16 @@
 #define MAX_ABILITIES 6
 
 /**
+ * Highest level a player can reach (the stat tables have 99 rows).
+ */
+#define MAX_PLAYER_LEVEL 99
+
+/**
+ * Size of `Player::name`, and of every buffer a hero name is copied through.
+ */
+#define PLAYER_NAME_LEN 8
+
+/**
  * Level to set for new characters.
  */
 #define NEW_CHARACTER_LEVEL 5
@@ -91,6 +101,9 @@ typedef enum SpecialFlags {
   SPECIAL_HASTE = FLAG(1),
   SPECIAL_EVASION = FLAG(2),
   SPECIAL_SLEET_STORM = FLAG(3),
+  // Only ever in a monster's special_immune: Trip Attack and Open Palm can't
+  // knock it down.
+  SPECIAL_TRIP = FLAG(4),
   SPECIAL_INSTANT_KILL = FLAG(7),
 } SpecialFlags;
 
@@ -101,7 +114,7 @@ typedef struct Player {
   /**
    * Player's name.
    */
-  char name[8];
+  char name[PLAYER_NAME_LEN];
   /**
    * The player's class.
    */
@@ -204,8 +217,8 @@ typedef struct Player {
    */
   uint8_t aspect_vuln;
   /**
-   * Debuff immunity. Each bit corresponds to a different immunity.
-   * @see `StatusEffectImmunity`
+   * Debuff immunity. Each bit corresponds to a different debuff.
+   * @see `DebuffFlag`
    */
   uint8_t debuff_immune;
   /**
@@ -221,7 +234,7 @@ typedef struct Player {
    */
   bool has_torch;
   /**
-   * Gauge that represents how long the torch can stay lit.
+   * Steps of fuel left in the torch, 0 when it is out.
    */
   uint8_t torch_gauge;
   /**
@@ -229,7 +242,7 @@ typedef struct Player {
    */
   FlameColor torch_color;
   /**
-   * Number of magic keys the player currently posesses.
+   * Number of magic keys the player currently possesses.
    */
   uint8_t magic_keys;
   /**
@@ -296,6 +309,14 @@ void set_player_level(uint8_t level) BANKED;
 void init_player(PlayerClass player_class) BANKED;
 
 /**
+ * Copies a class's default name into `dst`, which must hold PLAYER_NAME_LEN
+ * bytes; the name is NUL terminated and the rest of `dst` is zero filled. A
+ * copy rather than a pointer so callers in other banks never dereference this
+ * bank's ROM.
+ */
+void default_hero_name(PlayerClass player_class, char *dst) BANKED;
+
+/**
  * Adds the given experience points and performs a level up if applicable.
  * @param xp Experience points to add.
  * @return `true` if the player leveled up.
@@ -358,7 +379,7 @@ inline bool is_martial_class(void) {
  * @return `true` if the player has leveled up.
  */
 inline bool has_leveled(void) {
-  return player.next_level_exp >= player.exp;
+  return player.exp >= player.next_level_exp;
 }
 
 /**

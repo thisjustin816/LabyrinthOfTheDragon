@@ -24,7 +24,7 @@ static void kobold_take_turn(Monster *m) {
   // Kobolds sometimes space out entirely
   if (move_roll >= daze_chance[m->exp_tier]) {
     sprintf(battle_pre_message, str_monster_kobold_dazed, m->id);
-    SKIP_POST_MSG;
+    sprintf(battle_post_message, str_monster_kobold_does_nothing);
     SFX_FAIL;
     return;
   }
@@ -48,7 +48,6 @@ static void kobold_take_turn(Monster *m) {
 
   if (roll_attack_monster(atk, def)) {
     uint16_t base_damage = get_monster_dmg(m->level, m->exp_tier);
-    clear_debug();
     damage_player(base_damage, type);
   } else if (d16() >= prone_chance[m->exp_tier]) {
     sprintf(battle_post_message, str_monster_kobold_miss);
@@ -251,10 +250,19 @@ static void bugbear_take_turn(Monster *monster) {
   ) {
     sprintf(battle_pre_message, str_monster_bugbear_for_hruggek, monster->id);
     if (roll_attack_monster(monster->atk, player.mdef)) {
-      apply_scared(encounter.player_status_effects, C_TIER, 2, 0);
-      sprintf(battle_post_message, str_monster_bugbear_for_hruggek_hit);
+      // The roar still lands and the charge is still spent even when the
+      // fear itself is blocked (e.g. Still Mind); only the text and sound
+      // depend on whether it actually stuck.
+      StatusEffectResult result = apply_scared(
+        encounter.player_status_effects, C_TIER, 2, player.debuff_immune);
       monster->parameter--;
-      SFX_MAGIC;
+      if (result == STATUS_RESULT_SUCCESS) {
+        sprintf(battle_post_message, str_monster_bugbear_for_hruggek_hit);
+        SFX_MAGIC;
+      } else {
+        sprintf(battle_post_message, str_monster_bugbear_for_hruggek_miss);
+        SFX_FAIL;
+      }
     } else {
       sprintf(battle_post_message, str_monster_bugbear_for_hruggek_miss);
       SFX_FAIL;
@@ -306,7 +314,8 @@ void bugbear_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
   m->mdef_base = get_monster_def(level_offset(level, 2), tier);
   m->agl_base = get_agl(level_offset(level, 3), tier);
 
-  m->debuff_immune = DEBUFF_BLIND | DEBUFF_CONFUSED | DEBUFF_POISONED;
+  m->debuff_immune =
+    FLAG_DEBUFF_BLIND | FLAG_DEBUFF_CONFUSED | FLAG_DEBUFF_POISONED;
   m->parameter = 1;
 
   m->bank = BANK_6;
@@ -332,12 +341,16 @@ static void owlbear_take_turn(Monster *monster) {
     if (roll_attack_monster(monster->atk, player.def)) {
       uint16_t base_damage = get_monster_dmg(monster->level, tier);
       if (d8() < 2) {
-        // Toppled
-        monster->parameter--;
+        // Toppled, unless Evasion dodged the pounce outright: a zero from
+        // damage_player() is a dodge it has already announced, and like a
+        // miss, a dodged pounce knocks nobody down and keeps its charge.
         uint16_t dmg = damage_player(base_damage, DAMAGE_PHYSICAL);
-        player.trip_turns = 1;
-        sprintf(battle_post_message, str_monster_owlbear_pounce_topple, dmg);
-        SFX_SPECIAL_CRIT;
+        if (dmg > 0) {
+          monster->parameter--;
+          player.trip_turns = 1;
+          sprintf(battle_post_message, str_monster_owlbear_pounce_topple, dmg);
+          UNLESS_CRITICAL(SFX_SPECIAL_CRIT);
+        }
       } else {
         damage_player(base_damage, DAMAGE_PHYSICAL);
       }
@@ -476,8 +489,9 @@ void gelatinous_cube_generator(
 
   m->aspect_resist = DAMAGE_PHYSICAL;
   m->aspect_vuln = DAMAGE_MAGICAL;
-  m->debuff_immune = DEBUFF_POISONED | DEBUFF_BLIND | DEBUFF_SCARED;
-  m->special_immune = SPECIAL_SLEET_STORM;
+  m->debuff_immune =
+    FLAG_DEBUFF_POISONED | FLAG_DEBUFF_BLIND | FLAG_DEBUFF_SCARED;
+  m->special_immune = SPECIAL_SLEET_STORM | SPECIAL_TRIP;
 
   // Number of times they can execute the "consume" ability
   m->parameter = tier < A_TIER ? 1 : 2;
@@ -497,21 +511,28 @@ static void displacer_beast_take_turn(Monster *monster) {
     battle_pre_message, str_monster_displacer_beast_tentacle, monster->id);
 
   bool hit1 = roll_attack_monster(monster->atk, player.def);
-  bool hit2 = roll_attack_monster(level_offset(monster->atk, -7), player.def);
+  bool hit2 = roll_attack_monster(stat_minus(monster->atk, 7), player.def);
 
   uint8_t tier = monster->exp_tier > B_TIER ? A_TIER : C_TIER;
 
   uint16_t base_damage = get_monster_dmg(
     level_offset(monster->level, -10), tier);
 
+  // A zero is a blow the monk's Evasion dodged: damage_player() has already
+  // said "But you evade!" and played the evade sound, and writing the hit line
+  // over it would read "They hit twice for 0 damage!".
   if (hit1 && hit2) {
     const uint16_t result = damage_player(2 * base_damage, DAMAGE_DARK);
-    sprintf(battle_post_message, str_monster_displacer_beast_2hit, result);
-    SFX_SPECIAL_CRIT;
+    if (result > 0) {
+      sprintf(battle_post_message, str_monster_displacer_beast_2hit, result);
+      UNLESS_CRITICAL(SFX_SPECIAL_CRIT);
+    }
   } else if (hit1 || hit2) {
     const uint16_t result = damage_player(base_damage, DAMAGE_DARK);
-    sprintf(battle_post_message, str_monster_displacer_beast_1hit, result);
-    SFX_MELEE;
+    if (result > 0) {
+      sprintf(battle_post_message, str_monster_displacer_beast_1hit, result);
+      UNLESS_CRITICAL(SFX_MELEE);
+    }
   } else {
     sprintf(battle_post_message, str_monster_displacer_beast_miss);
     SFX_MISS;
@@ -562,7 +583,11 @@ static void will_o_wisp_take_turn(Monster *monster) {
       if (damage + monster->target_hp > monster->max_hp)
         heal = monster->max_hp - monster->target_hp;
       monster->target_hp += heal;
-      sprintf(battle_post_message, str_monster_will_o_wisp_siphon_hit, damage);
+      // Zero is an evaded hit, which damage_player() has already announced.
+      if (damage > 0) {
+        sprintf(
+          battle_post_message, str_monster_will_o_wisp_siphon_hit, damage);
+      }
     } else {
       sprintf(battle_post_message, str_monster_miss);
       SFX_FAIL;
@@ -573,12 +598,17 @@ static void will_o_wisp_take_turn(Monster *monster) {
   // Phase terror!
   if (d8() < monster->parameter) {
     sprintf(battle_pre_message, str_monster_will_o_wisp_scare, monster->id);
-    if (roll_attack_monster(monster->matk, level_offset(player.mdef, -5))) {
+    if (roll_attack_monster(monster->matk, stat_minus(player.mdef, 5))) {
       const uint8_t scared_turns[4] = { 2, 3, 5, 7 };
-      apply_scared(encounter.player_status_effects,
+      StatusEffectResult result = apply_scared(encounter.player_status_effects,
         A_TIER, scared_turns[monster->exp_tier], player.debuff_immune);
-      sprintf(battle_post_message, str_monster_will_o_wisp_scare_hit);
-      SFX_MAGIC;
+      if (result == STATUS_RESULT_SUCCESS) {
+        sprintf(battle_post_message, str_monster_will_o_wisp_scare_hit);
+        SFX_MAGIC;
+      } else {
+        sprintf(battle_post_message, str_monster_will_o_wisp_scare_miss);
+        SFX_FAIL;
+      }
     } else {
       sprintf(battle_post_message, str_monster_will_o_wisp_scare_miss);
       SFX_FAIL;
@@ -589,7 +619,12 @@ static void will_o_wisp_take_turn(Monster *monster) {
   // Normal attack
   sprintf(battle_pre_message, str_monster_will_o_wisp_lightning, monster->id);
   if (roll_attack_monster(monster->matk, player.mdef)) {
-    damage_player(base_damage, DAMAGE_AIR);
+    uint16_t damage = damage_player(base_damage, DAMAGE_AIR);
+    // Flavor over the generic hit line, the way the other themed attacks do.
+    // A zero means the hit was evaded; leave that message, and its sound, be.
+    if (damage > 0) {
+      sprintf(battle_post_message, str_monster_will_o_wisp_hit, damage);
+    }
   } else {
     sprintf(battle_post_message, str_monster_miss);
     SFX_MISS;
@@ -611,7 +646,7 @@ void will_o_wisp_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
 
   m->aspect_resist = DAMAGE_PHYSICAL;
   m->aspect_vuln = DAMAGE_LIGHT;
-  m->debuff_immune = DAMAGE_DARK;
+  m->aspect_immune = DAMAGE_DARK;
 
   const uint8_t phase_terror_chance[4] = { 1, 2, 3, 4 };
   m->parameter = phase_terror_chance[tier];
@@ -640,14 +675,19 @@ static void deathknight_take_turn(Monster *monster) {
       str_monster_deathknight_hellfire, monster->id);
 
     base_damage = get_monster_dmg(orb_level, tier);
+    // Zero is an evaded hit, which damage_player() has already announced.
     if (roll_attack_monster(monster->matk, player.mdef)) {
       uint16_t damage = damage_player(base_damage, DAMAGE_FIRE);
-      sprintf(battle_post_message,
-        str_monster_deathknight_hellfire_hit, damage);
+      if (damage > 0) {
+        sprintf(battle_post_message,
+          str_monster_deathknight_hellfire_hit, damage);
+      }
     } else {
       uint16_t damage = damage_player(base_damage / 2, DAMAGE_FIRE);
-      sprintf(battle_post_message,
-        str_monster_deathknight_hellfire_miss, damage);
+      if (damage > 0) {
+        sprintf(battle_post_message,
+          str_monster_deathknight_hellfire_miss, damage);
+      }
     }
     return;
   }
@@ -660,13 +700,19 @@ static void deathknight_take_turn(Monster *monster) {
 
   base_damage = get_monster_dmg(longsword_level, tier);
 
+  // Zero is an evaded hit, which damage_player() has already announced.
   if (hit1 && hit2) {
     base_damage *= 2;
     uint16_t damage = damage_player(base_damage, DAMAGE_PHYSICAL);
-    sprintf(battle_post_message, str_monster_deathknight_hit2, damage);
+    if (damage > 0) {
+      sprintf(battle_post_message, str_monster_deathknight_hit2, damage);
+      UNLESS_CRITICAL(SFX_SPECIAL_CRIT);
+    }
   } else if (hit1 || hit2) {
     uint16_t damage = damage_player(base_damage, DAMAGE_PHYSICAL);
-    sprintf(battle_post_message, str_monster_deathknight_hit1, damage);
+    if (damage > 0) {
+      sprintf(battle_post_message, str_monster_deathknight_hit1, damage);
+    }
   } else {
     sprintf(battle_post_message, str_monster_miss);
     SFX_MISS;
@@ -688,7 +734,7 @@ void deathknight_generator(Monster *m, uint8_t level, PowerTier tier) BANKED {
 
   m->aspect_resist = DAMAGE_MAGICAL;
   m->aspect_vuln = DAMAGE_LIGHT;
-  m->debuff_immune = DAMAGE_DARK;
+  m->aspect_immune = DAMAGE_DARK;
 
   m->bank = BANK_6;
   m->take_turn = deathknight_take_turn;

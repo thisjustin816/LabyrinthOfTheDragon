@@ -12,8 +12,12 @@ const palette_color_t textbox_palette[4] = {
   RGB8(22, 6, 4),
 };
 
-static void init_textbox(void) {
+void reload_textbox_palette(void) BANKED {
   core.load_bg_palette(textbox_palette, 7, 1);
+}
+
+static void init_textbox(void) {
+  reload_textbox_palette();
   core.draw_tilemap(textbox_tilemap, VRAM_WINDOW);
   textbox.y = 144;
   textbox.state = TEXT_BOX_CLOSED;

@@ -5,11 +5,20 @@ data/strings_*.c
 src/strings.h
 res/tiles/*
 src/tables.c
+src/version.h
 .vscode/settings.json
 
 # Ignore all build files
 obj/
 *.ihx
+# Debug-build side files, such as the .noi that GBDK_DEBUG=ON make writes
+# next to the ROM. make clean removes these too.
+*.noi
+*.cdb
+*.adb
+*.lst
+*.rst
+*.sym
 
 # Prerequisites
 *.d
@@ -66,6 +75,9 @@ dkms.conf
 
 # Node Modules (for tools)
 node_modules/
+
+# Python bytecode (for tools)
+__pycache__/
 
 # OS Trash
 .DS_Store

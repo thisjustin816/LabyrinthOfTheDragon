@@ -1,6 +1,7 @@
 #pragma bank 2
 
 #include "floor.h"
+#include "sound.h"
 
 bool chest_add_magic_key(Chest *chest) {
   if (is_chest_locked(chest->id)) {
@@ -25,6 +26,16 @@ bool chest_add_torch(Chest *chest) {
     map_textbox(str_maps_get_torch);
   }
   return true;
+}
+
+void teach_elite_ability(AbilityFlag flag) BANKED {
+  if (player.ability_flags & flag) {
+    map_textbox(str_floor_common_learned_all);
+    return;
+  }
+  grant_ability(flag);
+  play_sound(sfx_big_powerup);
+  map_textbox(get_grant_message(flag));
 }
 
 bool floor7_chest_on_open(const Chest *chest) {

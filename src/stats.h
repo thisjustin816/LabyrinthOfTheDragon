@@ -95,7 +95,9 @@ typedef enum DebuffFlag {
 
 
 /**
- * Denotes that a status effect never ends.
+ * Denotes that a status effect never ends. Any other duration counts down once
+ * per turn of the entity carrying the effect, and a duration of 0 ends it at
+ * that entity's next turn, before it has had any effect.
  */
 #define EFFECT_DURATION_PERPETUAL 0xFF
 
@@ -153,20 +155,6 @@ typedef struct DamageResult {
 inline bool is_debuff(StatusEffect effect) {
   return effect <= DEBUFF_DEF_DOWN;
 }
-
-/**
- * Denotes a status effect immunity for the player or a monster.
- */
-typedef enum StatusEffectImmunity {
-  IMMUNE_BLIND = FLAG(0),
-  IMMUNE_SCARED = FLAG(1),
-  IMMUNE_PARALYZED = FLAG(2),
-  IMMUNE_POISON = FLAG(3),
-  IMMUNE_CONFUSED = FLAG(4),
-  IMMUNE_AGL_DOWN = FLAG(5),
-  IMMUNE_ATK_DOWN = FLAG(6),
-  IMMUNE_DEF_DOWN = FLAG(7),
-} StatusEffectImmunity;
 
 /**
  * Denotes a possible result when attempting to apply a status effect.
@@ -397,9 +385,12 @@ uint16_t calc_damage(uint8_t d16_roll, uint16_t base_dmg) BANKED;
 uint16_t calc_monster_exp(uint8_t level, PowerTier tier) BANKED;
 
 /**
- * Rolls to see if a flee attempt is successful, given opposing agilities.
+ * Rolls to see if a flee attempt is successful, given opposing agilities: half
+ * the time, plus 1 in 16 for each point of AGL the one fleeing has over the
+ * blocker, and never below 1 in 8 or above 7 in 8. AGL runs from 0 to about 20
+ * over the whole game, so a gap of a few points already counts for a lot.
  * @param agl Agility of the entity attempting to flee.
- * @param block_agility Agility of the blocker, attempting to stop the flee.
+ * @param block_agl Agility of the blocker, attempting to stop the flee.
  */
 bool roll_flee(uint8_t agl, uint8_t block_agl) BANKED;
 
@@ -475,6 +466,17 @@ inline uint8_t level_offset(int8_t level, int8_t offset) {
 }
 
 /**
+ * Lowers a stat without going below 0. Stats need this rather than
+ * `level_offset`, which caps at 99 and reads anything past 127 as negative.
+ * @param stat The stat to lower.
+ * @param amount How much to take off.
+ * @return The lowered stat.
+ */
+inline uint8_t stat_minus(uint8_t stat, uint8_t amount) {
+  return stat > amount ? stat - amount : 0;
+}
+
+/**
  * @return `true` if the damage / healing roll is critical.
  * @param d16_roll Result of a d16 roll.
  */
@@ -491,18 +493,9 @@ inline bool is_fumble(uint8_t d16_roll) {
 }
 
 /**
- * @return `true` If immune to the given effect.
- * @param immune Immunity bitfield.
- * @param effec Status effect to check.
- */
-inline bool is_debuff_immmune(uint8_t immune, StatusEffect effect) {
-  return immune & FLAG(effect);
-}
-
-/**
- * Caluclates if a scared entity flees or not.
+ * Calculates if a scared entity flees or not.
  * @param tier Tier of the scared debuff.
- * @return `
+ * @return `true` if the entity flees.
  */
 inline bool calc_scared_flee(PowerTier tier) {
   switch (tier) {

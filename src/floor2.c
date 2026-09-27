@@ -66,7 +66,7 @@ static const Chest chests[] = {
   {
     CHEST_5,
     MAP_B, 29, 3, false, false,
-    str_chest_item_1pots,
+    str_chest_item_1pot,
     chest_item_1pot
   },
   { END },
@@ -261,14 +261,12 @@ static const Sconce sconces[] = {
 };
 
 //------------------------------------------------------------------------------
-// NPCs (IMPLS YET)
+// NPCs
 //------------------------------------------------------------------------------
 
 static void elite_victory(void) BANKED {
   set_npc_invisible(NPC_1);
-  grant_ability(ABILITY_1);
-  play_sound(sfx_big_powerup);
-  map_textbox(get_grant_message(ABILITY_1));
+  teach_elite_ability(ABILITY_1);
 }
 
 static bool elite_encounter(void) {
@@ -276,6 +274,7 @@ static bool elite_encounter(void) {
   Monster *monster = encounter.monsters;
   bugbear_generator(monster, 20, A_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(elite_victory);
   start_battle();
   return true;
@@ -292,6 +291,7 @@ static bool boss_encounter(void) {
   reset_encounter(MONSTER_LAYOUT_1);
   owlbear_generator(monster, 17, S_TIER);
   monster->id = 'A';
+  monster->can_flee = false;
   set_on_victory(boss_victory);
   start_battle();
   return true;
@@ -304,7 +304,7 @@ static bool on_npc_action(const NPC *npc) {
     map_textbox_with_action(str_floor2_elite_msg, elite_encounter);
     return true;
   case NPC_2:
-    if (player.level < 17) {
+    if (player.level < 15) {
       map_textbox(str_maps_boss_not_yet);
       return true;
     }
@@ -328,7 +328,7 @@ static const NPC npcs[] = {
   }
   */
 
-  { NPC_1, MAP_A, 3, 5, MONSTER_BUGBEAR, B_TIER, on_npc_action }, // Elite
+  { NPC_1, MAP_A, 3, 5, MONSTER_BUGBEAR, A_TIER, on_npc_action }, // Elite
   { NPC_2, MAP_A, 10, 3, MONSTER_OWLBEAR, S_TIER, on_npc_action }, // Boss
   { END }
 };
