@@ -30,7 +30,7 @@ def engage(g, note, shot=None):
     """Walk from anywhere in the chamber to the dragon, check its line against
     strings.js through the text oracle, and wait for the battle. A line that
     doesn't match stops the suite. Returns the dragon's max HP."""
-    f8 = Floor(8, open_doors={("A", 8, 9)}, extra_walls={("A", *DRAGON)})
+    f8 = Floor(8, open_doors={("A", 8, 9)}, npc_visible=g.get("npc_visible"))
     if g.pos()[1] > 8:
         assert cross_exit(g, f8, "A", ("A", 8, 9), "A", (8, 5), f"{note}: to the chamber")
     path, facing = f8.path("A", g.pos(), "A", DRAGON, face_adjacent=True)

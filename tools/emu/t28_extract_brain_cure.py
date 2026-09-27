@@ -42,7 +42,8 @@ def mirror_confused():
 
 g, _ = start_on(8, level=47, items={"POTION": 20, "REMEDY": 20, "ELIXIR": 5}, tag="t28eb")
 f = Floor(8, open_doors=set(), extra_walls={("A", 2, 27), ("A", 14, 27), ("A", 3, 22),
-                                            ("A", 13, 22), ("A", 4, 17), ("A", 8, 11), ("A", 8, 3)})
+                                            ("A", 13, 22), ("A", 4, 17)},
+          npc_visible=g.get("npc_visible"))
 save_checkpoint(g, "t28eb_start.state")
 
 cured_lines, brain_after_cure = [], []

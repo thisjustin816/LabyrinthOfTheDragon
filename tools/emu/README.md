@@ -103,6 +103,7 @@ numbered in the order they were written:
 | t58 | Fireball, Insect Plague, and Cleave saying what they dealt, one number for monsters that took the same and each monster's damage otherwise, every number matching the HP lost, and Cleave halved by a physical resistance but not a magic one |
 | t59 | the file screen showing the build's version, the Makefile's major and minor version and the commits since it changed, at the bottom left in the hint gray, beside a saved file, after the erase prompt's YES box has covered it, and after B on hero select |
 | t60 | SELECT on the name entry labeling B2 to B8 and wrapping back to blank, and each start's first save holding that floor, a first run's level, the abilities, the torch, a key for each of its key-locked chests, and a first run's items, the keys and items worked out from the floors' sources |
+| t61 | a standing NPC walling off its tile and a hidden one letting the hero across, at floor 8's beholder, with the pathfinder routing the way the game does |
 
 ### Pitfalls
 
@@ -151,8 +152,9 @@ The suites' shared library for playing the game rather than poking it:
   character on floor 8 walked up to the dragon and into the battle.
 - `knight.py`: the death knight fight's setup for t33, t36, and t38, a hero on
   floor 8 stepping onto the knight's tile.
-- `nav.py` with `exits_db.py`: pathfinding over the game's own map files and a
-  hand copy of each floor's exit and door tables.
+- `nav.py` with `exits_db.py`: pathfinding over the game's own map files, a
+  hand copy of each floor's exit and door tables, and the NPCs in each floor's
+  source, which block while they stand.
 - `text_oracle.py`: a textbox seen in play compared against what
   `assets/strings.js` says it should show.
 

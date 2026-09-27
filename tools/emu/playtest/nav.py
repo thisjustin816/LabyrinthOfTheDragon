@@ -18,11 +18,17 @@ consumer gets the true rest tile.
 Closed doors (tracked by the caller) block like walls; once opened they
 behave like whatever they gate (usually also an exit). A tile drawn as a
 stairway can't be stepped onto from the side (map.c's start_move()).
+
+A visible NPC walls off its tile and a hidden one doesn't, as map.c's tile
+lookup decides from npc_visible. The NPCs themselves come from each floor's
+npcs[] table in src/floorN.c.
 """
-import collections, os, sys
+import collections, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "audit"))
 from exits_db import EXITS, DOORS
+from shared import strip_comments
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, os.pardir))
 
@@ -43,7 +49,9 @@ HEADING_DELTA = dict(DIRS, HERE=(0, 0))
 # The tilemap graphics of src/map.h's DOOR_STAIRS_UP and DOOR_STAIRS_DOWN,
 # through core.c's map_tile_lookup.
 STAIRS_ART = {0x18, 0x24}
+MAP_LETTERS = {"MAP_A": "A", "MAP_B": "B"}
 _grid_cache = {}
+_npc_cache = {}
 
 
 def load_grid(floor, map_letter="A"):
@@ -58,15 +66,33 @@ def load_grid(floor, map_letter="A"):
     return _grid_cache[key]
 
 
-class Floor:
-    """A floor's navigable graph: which maps it has, its exits and doors,
-    and the caller's live door-open / extra-wall overrides."""
+def load_npcs(floor):
+    """{(map, x, y): NpcId} for the floor's NPCs, where NPC_1 and NPC_2 are
+    the npc_visible bits FLAG(0) and FLAG(1) (src/map.h)."""
+    if floor not in _npc_cache:
+        src = strip_comments(open(os.path.join(REPO, "src", f"floor{floor}.c")).read())
+        table = re.search(r"static const NPC npcs\[\]\s*=\s*\{(.*?)\n\};", src, re.S).group(1)
+        _npc_cache[floor] = {
+            (MAP_LETTERS[m], int(x), int(y)): 1 << (int(k) - 1)
+            for k, m, x, y in re.findall(
+                r"\{\s*NPC_(\d)\s*,\s*(MAP_[AB])\s*,\s*(\d+)\s*,\s*(\d+)", table)}
+    return _npc_cache[floor]
 
-    def __init__(self, floor_num, open_doors=(), extra_walls=()):
+
+class Floor:
+    """A floor's navigable graph: which maps it has, its exits, doors, and
+    NPCs, and the caller's live door-open / extra-wall overrides.
+
+    `npc_visible` is the game's own byte of which NPCs stand, so a suite
+    playing a live game passes g.get("npc_visible"). The default stands them
+    all, as a first visit to the floor does."""
+
+    def __init__(self, floor_num, open_doors=(), extra_walls=(), npc_visible=0xFF):
         self.n = floor_num
         self.maps = FLOORS[floor_num]
         self.open_doors = set(open_doors)          # {(map,x,y)}
         self.extra_walls = set(extra_walls)         # e.g. floor6's live portals
+        self.npc_walls = {pos for pos, npc in load_npcs(floor_num).items() if npc_visible & npc}
         self.exit_by_src = {}
         for e in EXITS.get(floor_num, []):
             m, x, y, tm, tx, ty, heading = e
@@ -83,7 +109,7 @@ class Floor:
         return d is not None and (m, x, y) not in self.open_doors
 
     def _walkable(self, m, x, y):
-        if (m, x, y) in self.extra_walls:
+        if (m, x, y) in self.extra_walls or (m, x, y) in self.npc_walls:
             return False
         grid, w, h, _ = load_grid(self.n, m)
         if not (0 <= x < w and 0 <= y < h):
