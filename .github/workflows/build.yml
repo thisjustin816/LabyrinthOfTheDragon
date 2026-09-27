@@ -13,7 +13,7 @@ jobs:
   # Every pull request and every push to main builds the ROM and attaches it to
   # the run, zipped under the ROM's name with the release notes and a PDF of the
   # player's manual. A push to main is a release: it builds without the "+", and
-  # the release job publishes the ROM with those notes.
+  # the release job publishes the ROM and the manual with those notes.
   build:
     runs-on: ubuntu-latest
     outputs:
@@ -98,7 +98,8 @@ jobs:
           if-no-files-found: error
 
   # The only job with a write token. It checks out nothing, and publishes the
-  # ROM and notes the build job made as a release tagged with its version.
+  # ROM, manual, and notes the build job made as a release tagged with its
+  # version.
   release:
     if: github.event_name == 'push'
     needs: build
@@ -120,6 +121,7 @@ jobs:
           # no changelog lines.
           if [ -s out/release-notes.md ]; then notes=(--notes-file out/release-notes.md); else notes=(--generate-notes); fi
           gh release create "$VERSION" "out/LabyrinthOfTheDragon-$VERSION.gbc" \
+            out/LabyrinthOfTheDragon-manual.pdf \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "$VERSION" \

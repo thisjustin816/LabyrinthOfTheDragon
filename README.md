@@ -49,9 +49,9 @@ the credits card disagree. Each run attaches a zip named after the ROM, such as
 `tools/docs/render_manual.py` prints with headless Chrome.
 
 Every push to main is a release: it builds with `make RELEASE=1` and publishes
-the ROM as a GitHub release tagged with its version. Its notes are the lines
-that push added to `CHANGELOG.md`, under their section headings, which
-`tools/changelog2notes` prints for any earlier commit. When it added none,
+the ROM and the manual as a GitHub release tagged with its version. Its notes
+are the lines that push added to `CHANGELOG.md`, under their section headings,
+which `tools/changelog2notes` prints for any earlier commit. When it added none,
 GitHub's list of merged pull requests stands in. So a pull request adds its own
 bullets under the current heading. Its zip's `release-notes.md` previews the
 notes its merge would publish, and is empty when the merge would fall back to
