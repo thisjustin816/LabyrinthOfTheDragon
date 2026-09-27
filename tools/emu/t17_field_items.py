@@ -56,7 +56,7 @@ chk("T17 the picker starts on the potion", "Potion" in msg, repr(msg))
 # The cycling arrows are drawn either side of the name while there is more than
 # one usable item to cycle to. '<' is the redrawn left triangle and its mirror
 # sits in font cell 0x0E, which window_text() cannot represent (it renders any
-# non-ASCII cell as '?'), so these read the window tiles directly.
+# cell that isn't text as '?'), so these read the window tiles directly.
 ARROW_L_TILE, ARROW_R_TILE = 0x80 + ord("<"), 0x80 + 0x0E
 
 

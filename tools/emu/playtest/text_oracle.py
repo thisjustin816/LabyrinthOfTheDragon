@@ -17,7 +17,7 @@ from strings_fit import _tokenize, DIRECT_SUBS, MAX_LINE  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
-from drive import log  # noqa: E402
+from drive import log, tile_char  # noqa: E402
 
 import json
 import subprocess
@@ -40,16 +40,14 @@ def namespaces():
 
 
 # tile id -> what window_text()/bg_text() show for it, for every direct
-# substitution the compiler recognizes (encodeString's DirectSubstitutions
-# in tools/strings2c: delta = tile - 0x80, and the harness's own decode is
-# chr((tile - 0x80) & 0xFF)) -- both start from the same tile id, so they
-# always agree.
+# substitution the compiler recognizes (encodeString's DirectSubstitutions in
+# tools/strings2c, whose values are tile ids). Decoding them with the harness's
+# own tile_char() keeps the two in agreement.
 _SUB_TILE = {
     ':elipsis:': 0xE0, ':regen:': 0xFB, ':atk:': 0xDD, ':gil:': 0xA4,
     ':soulcoin:': 0xA5, ':arrow:': 0xA6, ':lquo:': 0xA2, ':rquo:': 0xA3,
 }
-SUB_CHAR = {k: (chr((v - 0x80) & 0xFF) if 32 <= ((v - 0x80) & 0xFF) < 127 else '?')
-            for k, v in _SUB_TILE.items()}
+SUB_CHAR = {k: tile_char(v) for k, v in _SUB_TILE.items()}
 
 
 def expected_pages(ns, key, params=None):

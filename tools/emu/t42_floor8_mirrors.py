@@ -62,6 +62,10 @@ chk("T42 while the unused mirror is drawn as it always was", palette_above(g, MI
 text, healed = use_mirror(g, MIRROR_1)
 chk("T42 the used mirror still refuses", not healed and "luster" in text.lower(),
     f"text={text!r} healed={healed}")
+# The text oracle decodes with tile_char() as well, so only a literal shows
+# that the ellipsis glyph reads as an ellipsis.
+chk("T42 and says so word for word, ellipsis and all", text == "The mirror has lost its luster\u2026",
+    f"text={text!r}")
 text, healed = use_mirror(g, MIRROR_2)
 chk("T42 and the unused one still heals", healed and palette_above(g, MIRROR_2) == DULL,
     f"text={text!r} healed={healed}")

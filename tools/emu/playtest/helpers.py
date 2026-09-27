@@ -230,7 +230,7 @@ def cstr(g, addr, n=128):
         c = g.rd8(addr + i)
         if c == 0:
             break
-        out.append(chr(c) if 32 <= c < 127 else " ")
+        out.append(TEXT_GLYPHS.get(c, chr(c) if 32 <= c < 127 else " "))
     return " ".join("".join(out).split())
 
 

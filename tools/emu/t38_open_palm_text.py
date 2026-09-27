@@ -49,7 +49,7 @@ def raw(g, addr, n=128):
         c = g.rd8(addr + i)
         if c == 0:
             break
-        out.append(chr(c))
+        out.append(TEXT_GLYPHS.get(c, chr(c)))
     return "".join(out)
 
 

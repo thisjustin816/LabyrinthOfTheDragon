@@ -84,7 +84,7 @@ numbered in the order they were written:
 | t39 | the title and file screens' frames counting toward the seed a floor's first step draws, the first fight after the same save changing with the title wait alone, and nothing rolling or counting on its own once play begins |
 | t40 | Trip Attack and Open Palm never knocking down the dragon or the gelatinous cube, Trip Attack saying so, and both still knocking down floor 1's goblin |
 | t41 | floor 7's eye lock following its two lever rules to the boss door and lighting the orb above it, starting over when the floor loads afresh, and the sconce pocket's cracked floor dropping the hero in front of the item room's door |
-| t42 | a floor 8 healing mirror used before the floor loads afresh staying used and drawn dull, while an unused one still heals, and a save loaded after QUIT drawing its mirrors as that save left them |
+| t42 | a floor 8 healing mirror used before the floor loads afresh staying used and drawn dull, its refusal read word for word down to the ellipsis, while an unused one still heals, and a save loaded after QUIT drawing its mirrors as that save left them |
 | t43 | floor 7's elite giving a haste potion, an ATK up, and a DEF up, and its textbox naming all three |
 | t44 | floors 2 to 6's elites, beaten again by a hero who already knows their ability, saying "You've learned all it can teach." instead of teaching it over |
 | t45 | floor 8's gauntlet: bright bones on each waiting fight, each fight's home-floor roar and line before it starts, dim bones and no second fight after a win, a save keeping the dim bones, and every fight back with bright bones when the floor loads afresh |

@@ -151,6 +151,24 @@ def set_field(blob, off, value, width=1):
     return bytes(b)
 
 
+# A font tile shows chr(tile - 0x80), except where the font draws a glyph of
+# its own in a character's cell. The ellipsis tools/strings2c makes of "..."
+# sits in the backtick's cell, and the game's text has no backtick.
+TILE_GLYPHS = {0xE0: "\u2026"}
+# The same glyphs by the byte a string in memory holds, which the text writer
+# draws as that byte plus FONT_OFFSET (src/core.h).
+TEXT_GLYPHS = {t - 0x80: c for t, c in TILE_GLYPHS.items()}
+
+
+def tile_char(t):
+    """The character a font tile shows, or "?" for a tile that isn't text.
+    One character per tile, so a decoded row's indexes are its columns."""
+    if t in TILE_GLYPHS:
+        return TILE_GLYPHS[t]
+    c = (t - 0x80) & 0xFF
+    return chr(c) if 32 <= c < 127 else "?"
+
+
 class Game:
     def __init__(self, rom=ROM, tag="run", sram=None, rom_overrides=None):
         self.rom = rom
@@ -446,11 +464,7 @@ class Game:
     def window_text(self, col, row, length):
         """Decode font tiles from the window tilemap (0x9C00)."""
         tiles = self._tilemap(self.pb.tilemap_window, col, col + length, row, None)
-        out = ""
-        for t in tiles:
-            c = (t - 0x80) & 0xFF
-            out += chr(c) if 32 <= c < 127 else "?"
-        return out
+        return "".join(tile_char(t) for t in tiles)
 
     def find_window_text(self, needle):
         """Row-wise search of the window map (0x9C00) with VRAM bank 0 selected."""
@@ -458,11 +472,7 @@ class Game:
 
     def bg_text(self, col, row, length):
         tiles = self._tilemap(self.pb.tilemap_background, col, col + length, row, None)
-        out = ""
-        for t in tiles:
-            c = (t - 0x80) & 0xFF
-            out += chr(c) if 32 <= c < 127 else "?"
-        return out
+        return "".join(tile_char(t) for t in tiles)
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +516,7 @@ def find_text(tm, needle):
 
 def _find_in_rows(grid, needle):
     for row in range(32):
-        s = "".join(chr((t - 0x80) & 0xFF) if 32 <= ((t - 0x80) & 0xFF) < 127 else "?" for t in grid[row])
+        s = "".join(tile_char(t) for t in grid[row])
         i = s.find(needle)
         if i >= 0:
             return (i, row, s.strip())
