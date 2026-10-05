@@ -346,6 +346,11 @@ def check_oracle(pages, oracle, note):
 def save_checkpoint(g, name):
     os.makedirs(CKPT_DIR, exist_ok=True)
     path = os.path.join(CKPT_DIR, name)
+    # A state keeps the held buttons, and PyBoy 2.7 still reads them after
+    # load_state, so a reloaded run would walk or scroll a menu on its own.
+    for button in ("up", "down", "left", "right", "a", "b", "start", "select"):
+        g.pb.button_release(button)
+    g.tick(1)
     with open(path, "wb") as fh:
         g.pb.save_state(fh)
     log(f"  checkpoint saved: {path}")

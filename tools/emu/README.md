@@ -127,7 +127,8 @@ kill is confirmed by its door opening, its NPC hiding, and the credits.
 run against a ROM whose `.noi` is missing or older than it. If you add a PyBoy
 hook, put it only at an address that starts an instruction in its bank (the
 `.noi`'s `A$` and `C$` labels mark them), or the patched byte corrupts the
-code under it.
+code under it. Hook only one of two adjacent one-byte instructions, such as a
+load followed by a store: hooks on both stall the emulator.
 
 ## playtest/
 
