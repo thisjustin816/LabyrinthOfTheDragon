@@ -40,16 +40,20 @@ The changelog's latest heading and the credits card's `fork` line in
 `1.1 FORK`, so change them along with the `Makefile`.
 
 The build workflow, `.github/workflows/build.yml`, builds the ROM with
-GBDK-2020 4.5.0 for every pull request and every push to main. A pull request
-builds its own head commit rather than GitHub's merge preview, so its number
-matches a local build. The workflow stops if the `Makefile`, the changelog, and
+GBDK-2020 4.5.0 for every pull request and for every push to main that changes
+the game. A pull request builds its own head commit rather than GitHub's merge
+preview, so its number matches a local build. The workflow stops if the `Makefile`, the changelog, and
 the credits card disagree. Each run attaches a zip named after the ROM, such as
 `LabyrinthOfTheDragon-v1.1.4+.zip`, that holds the ROM, the release notes in
 `release-notes.md`, and a PDF of the player's manual, which
 `tools/docs/render_manual.py` prints with headless Chrome.
 
-Every push to main is a release: it builds with `make RELEASE=1` and publishes
-the ROM and the manual as a GitHub release tagged with its version. Its notes
+A push to main is a release when it changes the game, meaning anything under
+`src`, `data`, `assets`, or `res`, the `Makefile`, the package files, or the
+build scripts in `tools`; a push that touches only docs, tests, the changelog,
+or the workflow neither builds nor releases. A release builds with
+`make RELEASE=1` and publishes the ROM and the manual as a GitHub release
+tagged with its version. Its notes
 are the lines that push added to `CHANGELOG.md`, under their section headings,
 which `tools/changelog2notes` prints for any earlier commit. When it added none,
 GitHub's list of merged pull requests stands in. So a pull request adds its own

@@ -5,15 +5,34 @@ on:
   push:
     branches:
       - main
+    # A push is a release only when it changes what goes into the ROM: the
+    # sources, the assets and tables they are generated from, and the scripts
+    # and package files the Makefile builds with. Docs, tests, the changelog,
+    # and this workflow release nothing. Pull requests build every change.
+    paths:
+      - src/**
+      - data/**
+      - assets/**
+      - res/**
+      - Makefile
+      - package.json
+      - package-lock.json
+      - tools/png2bin
+      - tools/strings2c
+      - tools/tables2c
+      - tools/version2h
+      - tools/common.js
+      - tools/hash.js
 
 permissions:
   contents: read
 
 jobs:
-  # Every pull request and every push to main builds the ROM and attaches it to
-  # the run, zipped under the ROM's name with the release notes and a PDF of the
-  # player's manual. A push to main is a release: it builds without the "+", and
-  # the release job publishes the ROM and the manual with those notes.
+  # Every pull request and every push to main that changes the game builds the
+  # ROM and attaches it to the run, zipped under the ROM's name with the release
+  # notes and a PDF of the player's manual. Such a push is a release: it builds
+  # without the "+", and the release job publishes the ROM and the manual with
+  # those notes.
   build:
     runs-on: ubuntu-latest
     outputs:
