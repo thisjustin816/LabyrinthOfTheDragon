@@ -11,7 +11,6 @@ import io, random, re
 from lotd import *
 chk = Checker("t62_power_safe_saves")
 
-SRAM_BANK = 0x2000
 full = int(re.search(r"DEF Fsave\$sram_put\$0\$0 0x([0-9A-Fa-f]+)", open(NOI).read()).group(1), 16)
 SRAM_PUT = (full >> 16, full & 0xFFFF)
 
@@ -53,7 +52,7 @@ def regen(blob, generation, **fields):
 
 
 # --- random SRAM ---------------------------------------------------------------
-noise = bytes(random.Random(62).randrange(256) for _ in range(SRAM_BANK))
+noise = bytes(random.Random(62).randrange(256) for _ in range(SRAM_BANK_SIZE))
 g = Game(tag="t62a", sram=noise)
 chk("T62 random SRAM: boots to the save select", g.boot_to_save_select())
 g.tick(10)

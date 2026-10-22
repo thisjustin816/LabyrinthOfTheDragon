@@ -83,6 +83,7 @@ SAVE_SIZE = 443 + (SCRIPT_STATE_LEN - 8)
 SLOT_STRIDE = 512
 SLOT_COUNT = 3
 COPY_COUNT = 2
+SRAM_BANK_SIZE = 0x2000
 SAVE_MAGIC = 0x4C44
 SAVE_VERSION = 5
 OFF = dict(magic=0, version=2, checksum=3, player=4, inventory=51,
@@ -199,8 +200,11 @@ class Game:
         if rom_overrides:
             for (bank, addr), val in rom_overrides.items():
                 self.pb.memory[bank, addr] = val
-        if sram is not None:
-            self.set_sram(sram)
+        # PyBoy loads a <rom>.ram file it finds beside the ROM, so every boot
+        # zeroes the save bank first, or a save left there would load in place
+        # of a new game or of the copy a suite wrote.
+        sram = bytes(sram or b"")
+        self.set_sram(sram + bytes(SRAM_BANK_SIZE - len(sram)))
         self.nshot = 0
         self.log = []
 
