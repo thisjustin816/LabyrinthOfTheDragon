@@ -20,7 +20,7 @@ csv.DictReader leaves the type row at index 0, so a level's stats live at row[le
 import csv, os, sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
-from lotd import OFF, POFF, SLOT_STRIDE, ITEM_NAMES, set_field, fix_checksum, make_floor_template
+from lotd import OFF, POFF, SLOT_STRIDE, SLOT_COUNT, COPY_COUNT, ITEM_NAMES, set_field, fix_checksum, make_floor_template
 
 CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, os.pardir, "assets", "tables.csv")
 _ROWS = list(csv.DictReader(open(CSV)))
@@ -123,6 +123,6 @@ def build_hero(class_id, level=60, items=None, tag="hero"):
 
 
 def sram_for(blob):
-    sram = bytearray(3 * SLOT_STRIDE)
+    sram = bytearray(COPY_COUNT * SLOT_COUNT * SLOT_STRIDE)
     sram[0:len(blob)] = blob
     return bytes(sram)

@@ -1,4 +1,7 @@
 *.sav
+# PyBoy's battery file and save states
+*.ram
+*.state
 *.gb
 *.gbc
 data/strings_*.c

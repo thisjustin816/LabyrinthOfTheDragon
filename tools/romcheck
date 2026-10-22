@@ -1,0 +1,109 @@
+#!/usr/bin/env node
+
+const crypto = require('crypto');
+const fs = require('fs');
+
+/**
+ * Checks a linked ROM against what the Makefile asked for, and fails the build
+ * on any mismatch: the cartridge header's title, CGB flag, cartridge type, ROM
+ * and RAM size codes and mask-ROM version, both checksums, each bank's end
+ * from the linker's map, and the end of static work RAM against the stack's
+ * reserve. Prints the ROM's SHA-256 when every check passes.
+ *
+ * Usage: romcheck <rom> <map> --title <title> --cgb <flag> --cart <type>
+ *   --banks <ROM banks> --ram-banks <RAM banks> --version <mask-ROM version>
+ *   --stack-reserve <bytes>
+ */
+const [romFile, mapFile, ...rest] = process.argv.slice(2);
+const opts = {};
+for (let k = 0; k + 1 < rest.length; k += 2)
+  opts[rest[k].replace(/^--/, '')] = rest[k + 1];
+const required = [
+  'title', 'cgb', 'cart', 'banks', 'ram-banks', 'version', 'stack-reserve'];
+if (!romFile || !mapFile || required.some((name) => opts[name] === undefined)) {
+  console.error(
+    'Usage: romcheck <rom> <map> --title <title> --cgb <flag> --cart <type> ' +
+    '--banks <n> --ram-banks <n> --version <n> --stack-reserve <bytes>');
+  process.exit(2);
+}
+
+const BANK_SIZE = 0x4000;
+// GBDK starts the stack here and it grows down toward static work RAM.
+const STACK_TOP = 0xE000;
+// The header's RAM size code for each count of 8 KiB RAM banks.
+const RAM_SIZE_CODES = { 0: 0x00, 1: 0x02, 4: 0x03, 8: 0x05, 16: 0x04 };
+
+const rom = fs.readFileSync(romFile);
+const map = fs.readFileSync(mapFile, 'utf8');
+const failures = [];
+
+/** Records a failure unless `actual` is `expected`. */
+function expect(what, actual, expected) {
+  if (actual !== expected)
+    failures.push(`${what} is ${hex(actual)}, expected ${hex(expected)}`);
+}
+
+function hex(value) {
+  return typeof value === 'number' ? `0x${value.toString(16).toUpperCase()}` : value;
+}
+
+// The header. Beside a CGB flag the title field runs 15 bytes, padded with 0.
+const title = Buffer.alloc(15);
+title.write(opts.title, 'ascii');
+expect('the title', rom.subarray(0x134, 0x143).toString('hex'), title.toString('hex'));
+expect('the CGB flag', rom[0x143], Number(opts.cgb));
+expect('the cartridge type', rom[0x147], Number(opts.cart));
+const banks = Number(opts.banks);
+expect('the file size', rom.length, banks * BANK_SIZE);
+expect('the size the ROM size code gives', 0x8000 << rom[0x148], banks * BANK_SIZE);
+expect('the RAM size code', rom[0x149], RAM_SIZE_CODES[Number(opts['ram-banks'])]);
+expect('the mask-ROM version', rom[0x14C], Number(opts.version));
+
+let headerSum = 0;
+for (let a = 0x134; a <= 0x14C; a++)
+  headerSum = (headerSum - rom[a] - 1) & 0xFF;
+expect('the header checksum', rom[0x14D], headerSum);
+
+let globalSum = 0;
+for (let a = 0; a < rom.length; a++)
+  if (a !== 0x14E && a !== 0x14F) globalSum = (globalSum + rom[a]) & 0xFFFF;
+expect('the global checksum', rom.readUInt16BE(0x14E), globalSum);
+
+// Each area the map places in ROM, as the bank in the address's high 16 bits
+// and the CPU address in the low 16. The map lists an area again for every
+// module that adds to it, so each is checked once.
+const areas = new Map();
+for (const [, name, start, size] of map.matchAll(
+  /^(_\w+)\s+([0-9A-F]{8})\s+([0-9A-F]{8}) =/gm))
+  areas.set(name, { start: parseInt(start, 16), size: parseInt(size, 16) });
+for (const [name, { start, size }] of areas) {
+  const address = start & 0xFFFF;
+  const bank = start >> 16;
+  const end = address + size;
+  if (size === 0 || address >= 0x8000) continue;
+  if (bank >= banks)
+    failures.push(`${name} is in bank ${bank}, past the ROM's ${banks} banks`);
+  const limit = bank === 0 ? BANK_SIZE : 2 * BANK_SIZE;
+  if (end > limit)
+    failures.push(`${name} in bank ${bank} ends at ${hex(end)}, past ${hex(limit)}`);
+}
+
+const heapEnd = map.match(/^\s+([0-9A-F]{8})\s+s__HEAP_END\b/m);
+if (!heapEnd) {
+  failures.push(`${mapFile} has no s__HEAP_END`);
+} else {
+  const reserve = Number(opts['stack-reserve']);
+  const end = parseInt(heapEnd[1], 16);
+  if (end > STACK_TOP - reserve)
+    failures.push(
+      `static work RAM ends at ${hex(end)}, inside the stack's ` +
+      `${reserve}-byte reserve below ${hex(STACK_TOP)}`);
+}
+
+if (failures.length) {
+  for (const failure of failures)
+    console.error(`romcheck: ${romFile}: ${failure}`);
+  process.exit(1);
+}
+const sha256 = crypto.createHash('sha256').update(rom).digest('hex');
+console.log(`${sha256}  ${romFile}`);

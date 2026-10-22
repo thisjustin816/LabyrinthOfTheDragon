@@ -24,14 +24,24 @@ VERSION=1.1
 ROM_TITLE=LABYRINTH
 ROM_VERSION=$(firstword $(subst ., ,$(VERSION)))
 
+# Bytes below $E000, where the stack starts, that static work RAM must leave
+# free for it. tools/emu/t63_stack_depth.py measures how deep the stack goes in
+# play and fails when that comes within 256 bytes of this.
+STACK_RESERVE=1024
+
 LCC = $(GBDK_HOME)bin/lcc
+# -Wi-e fails the link on any warning from the ROM's overlap and overflow
+# check, which otherwise exits 0 and leaves a corrupt ROM. -Wl-m -Wl-w write
+# the map tools/romcheck reads, in the wide layout a debug build also uses; the
+# narrow one cuts symbol names short.
 LCCFLAGS = -Wm-yC -Wm-yt$(CART_TYPE) -Wl-yo$(ROM_BANKS) -Wl-ya$(RAM_BANKS) \
-	-Wm-yn"$(ROM_TITLE)" -Wm-yp0x14C=$(ROM_VERSION)
+	-Wm-yn"$(ROM_TITLE)" -Wm-yp0x14C=$(ROM_VERSION) -Wi-e -Wl-m -Wl-w
 
 PNG2BIN := ./tools/png2bin
 TABLES2C := ./tools/tables2c
 STRINGS2C := ./tools/strings2c
 VERSION2H := ./tools/version2h
+ROMCHECK := ./tools/romcheck
 
 # GBDK_DEBUG = ON
 ifdef GBDK_DEBUG
@@ -86,8 +96,14 @@ version:
 res/tiles/%.bin: assets/tiles/%.png
 	$(PNG2BIN) $< $@
 
+# A ROM that fails the check is deleted, so the next make links it again
+# rather than taking it as up to date.
 $(BIN): $(OBJ_FILES)
 	$(LCC) $(LCCFLAGS) -o $@ $^
+	$(ROMCHECK) $@ $(PROJECTNAME).map --title $(ROM_TITLE) --cgb 0xC0 \
+		--cart $(CART_TYPE) --banks $(ROM_BANKS) --ram-banks $(RAM_BANKS) \
+		--version $(ROM_VERSION) --stack-reserve $(STACK_RESERVE) \
+		|| { rm -f $@; exit 1; }
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(HDR_FILES) | $(OBJ_DIR)
 	$(LCC) $(LCCFLAGS) -c $< -o $@

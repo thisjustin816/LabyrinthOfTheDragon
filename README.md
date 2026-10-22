@@ -46,7 +46,9 @@ preview, so its number matches a local build. The workflow stops if the `Makefil
 the credits card disagree. Each run attaches a zip named after the ROM, such as
 `LabyrinthOfTheDragon-v1.1.4+.zip`, that holds the ROM, the release notes in
 `release-notes.md`, and a PDF of the player's manual, which
-`tools/docs/render_manual.py` prints with headless Chrome.
+`tools/docs/render_manual.py` prints with headless Chrome. Each run also builds
+the commit again from a clean clone and stops if that ROM differs by a byte,
+which catches a build that depends on an untracked or stale file.
 
 A push to main is a release when it changes the game, meaning anything under
 `src`, `data`, `assets`, or `res`, the `Makefile`, the package files, or the
@@ -55,11 +57,11 @@ or the workflow neither builds nor releases. A release builds with
 `make RELEASE=1` and publishes the ROM and the manual as a GitHub release
 tagged with its version. Its notes
 are the lines that push added to `CHANGELOG.md`, under their section headings,
-which `tools/changelog2notes` prints for any earlier commit. When it added none,
-GitHub's list of merged pull requests stands in. So a pull request adds its own
-bullets under the current heading. Its zip's `release-notes.md` previews the
-notes its merge would publish, and is empty when the merge would fall back to
-GitHub's list. Merge pull requests with a merge commit, not a squash. A squash
+which `tools/changelog2notes` prints for any earlier commit, and then the ROM's
+SHA-256. When it added none, GitHub's list of merged pull requests follows the
+hash. So a pull request adds its own bullets under the current heading. Its
+zip's `release-notes.md` previews the notes its merge would publish, and holds
+only the hash when the merge would fall back to GitHub's list. Merge pull requests with a merge commit, not a squash. A squash
 replaces a branch's commits with one, so the release after it could number
 below the branch's own test builds.
 
@@ -92,3 +94,8 @@ To build the ROM run the following commands:
 * `npm install`
 * `make assets`
 * `make`
+
+The link fails on any warning from GBDK's overlap and overflow check. Then
+`tools/romcheck` checks the cartridge header, both checksums, each bank's size,
+and the work RAM left for the stack (`STACK_RESERVE` in the `Makefile`), and
+prints the ROM's SHA-256. A ROM that fails is deleted.

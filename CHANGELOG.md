@@ -8,7 +8,7 @@ Based on the original's main branch as of August 24, 2025: 1.0.5 Alpha, plus its
 
 ### Added
 
-- Saving ([#75](https://github.com/NesHacker/LabyrinthOfTheDragon/issues/75)). Three save files on the cartridge's battery-backed RAM, a SAVE command in the menu, and a file screen that shows the game's version and each hero's level, floor, and play time, and asks before erasing a file. The floors' doors, levers, and puzzles are saved along with the hero.
+- Saving ([#75](https://github.com/NesHacker/LabyrinthOfTheDragon/issues/75)). Three save files on the cartridge's battery-backed RAM, a SAVE command in the menu, and a file screen that shows the game's version and each hero's level, floor, and play time, and asks before erasing a file. The floors' doors, levers, and puzzles are saved along with the hero. Each file is kept twice, and a save writes over the older copy, so if the power goes off partway through saving, the file keeps the save from before. A file saved by v1.1.6 or earlier still loads, and its next saves move it into the two copies.
 - A name for your hero, up to six letters, entered after choosing a class. The name the original gave that class's hero is filled in to start.
 - ITEMS in the menu, for drinking a Potion, Ether, or Elixir outside of battle ([#70](https://github.com/NesHacker/LabyrinthOfTheDragon/issues/70)).
 - QUIT in the menu, which returns to the title screen after asking first.
@@ -121,6 +121,7 @@ Based on the original's main branch as of August 24, 2025: 1.0.5 Alpha, plus its
 - An emulator test suite in `tools/emu` that plays the real ROM with PyBoy, with a test for most of the fixes above, plus static audits and balance scripts.
 - A player's manual (`docs/README.md`) and a walkthrough (`docs/walkthrough`) whose maps are drawn from the game's own data by `tools/docs/render_maps.py`.
 - The cartridge header carries the title LABYRINTH and a version byte, both set in the Makefile.
+- Every link fails on a linker overlap or overflow warning, and `tools/romcheck` then checks the ROM's header, checksums, bank sizes, and the work RAM left for the stack, and prints its SHA-256. The release notes carry the hash, and the workflow repeats each build from a clean clone, which must match it byte for byte.
 - Every pull request builds the ROM and attaches it to the run in a zip with a preview of the release notes and a PDF of the player's manual from `tools/docs/render_manual.py`. Every merge to main also publishes the ROM and the manual as a GitHub release, with the changelog lines the merge added as its notes.
 - The build numbers every ROM from the Makefile's major and minor version and a patch that counts the commits since that version changed. The file screen shows the result, such as v1.1.4, with a "+" on any build that isn't a release.
 - SELECT on the name entry screen starts a new game on a lower floor, B2 to B8, with the level, abilities, magic keys, and items a first run would bring there, to test a floor without playing the ones before it.

@@ -76,17 +76,27 @@ DIRBTN = {DIR["UP"]: "up", DIR["DOWN"]: "down", DIR["LEFT"]: "left",
           DIR["RIGHT"]: "right"}
 
 # SaveGame layout (SDCC: packed, 1-byte enums). Verified against a live dump.
+# Each slot has two copies of SLOT_STRIDE bytes: slot i's first at
+# i * SLOT_STRIDE, its second at (SLOT_COUNT + i) * SLOT_STRIDE (src/save.h).
 SCRIPT_STATE_LEN = 12
-SAVE_SIZE = 442 + (SCRIPT_STATE_LEN - 8)
+SAVE_SIZE = 443 + (SCRIPT_STATE_LEN - 8)
 SLOT_STRIDE = 512
+SLOT_COUNT = 3
+COPY_COUNT = 2
+SRAM_BANK_SIZE = 0x2000
 SAVE_MAGIC = 0x4C44
-SAVE_VERSION = 4
+SAVE_VERSION = 5
+# Saves from before each slot kept two copies: the layout without `generation`,
+# checksummed over the rest, in a slot's first copy only (src/save.c).
+ONE_COPY_VERSION = 4
+ONE_COPY_SIZE = SAVE_SIZE - 1
 OFF = dict(magic=0, version=2, checksum=3, player=4, inventory=51,
            flag_pages=59, play_seconds=91, floor_index=93, map_id=94,
            map_x=95, map_y=96, hero_direction=97, flags_chest_open=98,
            flags_chest_locked=99, flags_lever_on=100, flags_lever_stuck=101,
            flags_door_locked=102, flags_sconce_lit=104, npc_visible=105,
-           sconce_colors=106, script_state=114, overrides=114 + SCRIPT_STATE_LEN)
+           sconce_colors=106, script_state=114, overrides=114 + SCRIPT_STATE_LEN,
+           generation=114 + SCRIPT_STATE_LEN + 320)
 POFF = dict(name=0, player_class=8, ability_flags=9, level=10, exp=11,
             next_level_exp=13, message_speed=15, hp=16, max_hp=18, sp=20,
             max_sp=22, atk_base=24, atk=25, def_base=26, def_=27, matk_base=28,
@@ -98,15 +108,15 @@ POFF = dict(name=0, player_class=8, ability_flags=9, level=10, exp=11,
 PLAYER_SIZE = 47
 
 
-def checksum(blob):
-    s = sum(blob[:SAVE_SIZE]) - blob[OFF["checksum"]]
+def checksum(blob, size=SAVE_SIZE):
+    s = sum(blob[:size]) - blob[OFF["checksum"]]
     return s & 0xFF
 
 
-def fix_checksum(blob):
+def fix_checksum(blob, size=SAVE_SIZE):
     b = bytearray(blob)
     b[OFF["checksum"]] = 0
-    b[OFF["checksum"]] = sum(b[:SAVE_SIZE]) & 0xFF
+    b[OFF["checksum"]] = sum(b[:size]) & 0xFF
     return bytes(b)
 
 
@@ -144,6 +154,30 @@ def parse_save(blob):
     return d
 
 
+def copy_is_valid(blob):
+    return (blob[0] | (blob[1] << 8)) == SAVE_MAGIC and blob[2] == SAVE_VERSION \
+        and checksum(blob) == blob[OFF["checksum"]]
+
+
+def is_one_copy_save(blob):
+    return (blob[0] | (blob[1] << 8)) == SAVE_MAGIC and blob[2] == ONE_COPY_VERSION \
+        and checksum(blob, ONE_COPY_SIZE) == blob[OFF["checksum"]]
+
+
+def newest_copy(first, second):
+    """0 or 1 for the copy src/save.c's newest_copy() reads, or None when
+    neither is valid. Generations wrap: 0 is newer than 255, and a save from
+    before the two copies is older than any copy."""
+    if not (copy_is_valid(first) or is_one_copy_save(first)):
+        return 1 if copy_is_valid(second) else None
+    if not copy_is_valid(second):
+        return 0
+    if first[2] != SAVE_VERSION:
+        return 1
+    ahead = (second[OFF["generation"]] - first[OFF["generation"]]) & 0xFF
+    return 1 if 0 < ahead < 0x80 else 0
+
+
 def set_field(blob, off, value, width=1):
     b = bytearray(blob)
     for i in range(width):
@@ -178,8 +212,11 @@ class Game:
         if rom_overrides:
             for (bank, addr), val in rom_overrides.items():
                 self.pb.memory[bank, addr] = val
-        if sram is not None:
-            self.set_sram(sram)
+        # PyBoy loads a <rom>.ram file it finds beside the ROM, so every boot
+        # zeroes the save bank first, or a save left there would load in place
+        # of a new game or of the copy a suite wrote.
+        sram = bytes(sram or b"")
+        self.set_sram(sram + bytes(SRAM_BANK_SIZE - len(sram)))
         self.nshot = 0
         self.log = []
 
@@ -206,19 +243,34 @@ class Game:
     def set(self, name, v):
         self.wr8(SYM[name], v)
 
-    def sram(self, n=3 * SLOT_STRIDE):
+    def sram(self, n=COPY_COUNT * SLOT_COUNT * SLOT_STRIDE):
         return bytes(self.pb.memory[0, 0xA000:0xA000 + n])
 
     def set_sram(self, data):
         self.pb.memory[0, 0xA000:0xA000 + len(data)] = list(data)
 
-    def slot(self, i):
-        return self.sram()[i * SLOT_STRIDE:i * SLOT_STRIDE + SAVE_SIZE]
+    def copy(self, i, c):
+        """Copy `c` of slot `i`, valid or not."""
+        at = (c * SLOT_COUNT + i) * SLOT_STRIDE
+        return self.sram()[at:at + SAVE_SIZE]
 
-    def set_slot(self, i, blob):
+    def slot(self, i):
+        """The copy of slot `i` the game reads, or its first copy when neither
+        is valid."""
+        c = newest_copy(self.copy(i, 0), self.copy(i, 1))
+        return self.copy(i, c or 0)
+
+    def set_copy(self, i, c, blob):
         blob = bytes(blob)
         assert len(blob) == SAVE_SIZE
-        self.pb.memory[0, 0xA000 + i * SLOT_STRIDE:0xA000 + i * SLOT_STRIDE + SAVE_SIZE] = list(blob)
+        at = 0xA000 + (c * SLOT_COUNT + i) * SLOT_STRIDE
+        self.pb.memory[0, at:at + SAVE_SIZE] = list(blob)
+
+    def set_slot(self, i, blob):
+        """Write `blob` as slot `i`'s first copy and clear the second, so the
+        game reads `blob` or, if it isn't valid, nothing."""
+        self.set_copy(i, 0, blob)
+        self.set_copy(i, 1, bytes(SAVE_SIZE))
 
     def player_bytes(self):
         return bytes(self.pb.memory[SYM["player"]:SYM["player"] + PLAYER_SIZE])

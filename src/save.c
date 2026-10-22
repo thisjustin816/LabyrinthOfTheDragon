@@ -151,32 +151,59 @@ void save_new_game(void) BANKED {
 //------------------------------------------------------------------------------
 
 /**
- * Compile time assertion that a slot is actually big enough to hold a save.
+ * Compile time assertion that a copy is actually big enough to hold a save.
  * If `SaveGame` outgrows `SAVE_SLOT_SIZE` this declares an array of negative
- * length and the build fails here rather than corrupting the next slot.
+ * length and the build fails here rather than corrupting the next copy.
  */
 typedef char save_game_fits_in_slot[
   (sizeof(SaveGame) <= SAVE_SLOT_SIZE) ? 1 : -1];
 
 /**
- * SRAM is memory mapped, so a slot can be addressed directly instead of being
+ * Compile time assertion that every copy fits in SRAM bank 0.
+ */
+typedef char save_copies_fit_in_bank[
+  (SAVE_COPY_COUNT * SAVE_SLOT_COUNT * SAVE_SLOT_SIZE <= 0x2000) ? 1 : -1];
+
+/**
+ * The save being written. It is filled in work RAM and then copied to SRAM in
+ * one pass, so the copy can be written in an order a power cut can't tear.
+ */
+static SaveGame record;
+
+/**
+ * SRAM is memory mapped, so a copy can be addressed directly instead of being
  * copied into work RAM. Requires SRAM to be enabled.
  * @param slot Slot index.
- * @return Pointer to the slot in SRAM.
+ * @param copy Copy index, below `SAVE_COPY_COUNT`.
+ * @return Pointer to the copy in SRAM.
  */
-static SaveGame *sram_slot(uint8_t slot) {
-  return (SaveGame *)(SAVE_SRAM_BASE + (uint16_t)slot * (uint16_t)SAVE_SLOT_SIZE);
+static SaveGame *sram_copy(uint8_t slot, uint8_t copy) {
+  return (SaveGame *)(SAVE_SRAM_BASE +
+    (uint16_t)(copy * SAVE_SLOT_COUNT + slot) * (uint16_t)SAVE_SLOT_SIZE);
 }
 
 /**
- * Sums every byte of a save with the checksum field treated as zero.
+ * Writes one byte of SRAM. Every write to a save goes through here, which
+ * gives the emulator suites one place to cut the power between two writes.
+ * @param p Address to write.
+ * @param value Byte to write.
+ */
+static void sram_put(uint8_t *p, uint8_t value) {
+  *p = value;
+}
+
+/**
+ * Sums the first `size` bytes of a save with the checksum field treated as
+ * zero.
  * @param s Save to sum.
+ * @param size Bytes to sum: `sizeof(SaveGame)`, or one fewer for a save from
+ *  before `generation` was added.
  * @return The 8-bit checksum.
  */
-static uint8_t checksum_of(const SaveGame *s) {
+static uint8_t checksum_of(const SaveGame *s, uint16_t size) {
   const uint8_t *p = (const uint8_t *)s;
   uint8_t sum = 0;
-  for (uint16_t k = 0; k < sizeof(SaveGame); k++, p++)
+  for (uint16_t k = 0; k < size; k++, p++)
     sum += *p;
   // Undo the contribution of the stored checksum byte so that the result is
   // independent of whatever is currently sitting in that field.
@@ -184,19 +211,83 @@ static uint8_t checksum_of(const SaveGame *s) {
 }
 
 /**
- * Validates a slot. Requires SRAM to be enabled.
- * @param slot Slot to test.
- * @return `true` if the slot holds a valid, current-version save.
+ * Validates a copy. Requires SRAM to be enabled.
+ * @param s Copy to test.
+ * @return `true` if the copy holds a valid, current-version save.
  */
-static bool slot_is_valid(uint8_t slot) {
-  if (slot >= SAVE_SLOT_COUNT)
-    return false;
-
-  const SaveGame *s = sram_slot(slot);
+static bool copy_is_valid(const SaveGame *s) {
   if (s->magic != SAVE_MAGIC || s->version != SAVE_VERSION)
     return false;
 
-  return s->checksum == checksum_of(s);
+  return s->checksum == checksum_of(s, sizeof(SaveGame));
+}
+
+/**
+ * Compile time assertion that `SaveGame` is still version 4's layout plus
+ * `generation`. A layout change that raises `SAVE_VERSION` fails the build
+ * here, and must drop `is_one_copy_save` or carry those saves over field by
+ * field.
+ */
+typedef char one_copy_layout_matches[(SAVE_VERSION == 5) ? 1 : -1];
+
+/**
+ * Tests for a save from before each slot kept two copies. Requires SRAM to be
+ * enabled. Such a save has every field of `SaveGame` up to `generation`, which
+ * it lacks, so it loads as is. Only a slot's first copy can hold one.
+ * @param s Copy to test.
+ * @return `true` if the copy holds a valid version `SAVE_VERSION_ONE_COPY` save.
+ */
+static bool is_one_copy_save(const SaveGame *s) {
+  if (s->magic != SAVE_MAGIC || s->version != SAVE_VERSION_ONE_COPY)
+    return false;
+
+  return s->checksum == checksum_of(s, sizeof(SaveGame) - 1);
+}
+
+/**
+ * Finds the copy of a slot to read. Requires SRAM to be enabled.
+ *
+ * Generations wrap, so the newer copy is the one whose count is less than half
+ * the counter's range ahead of the other's: 0 is newer than 255. A save from
+ * before the two copies is older than any copy beside it, since the first save
+ * over it goes to the second copy.
+ * @param slot Slot to search.
+ * @return The newer of the slot's valid copies, or `NULL` if neither is valid.
+ */
+static SaveGame *newest_copy(uint8_t slot) {
+  if (slot >= SAVE_SLOT_COUNT)
+    return NULL;
+
+  SaveGame *first = sram_copy(slot, 0);
+  SaveGame *second = sram_copy(slot, 1);
+  if (!copy_is_valid(first) && !is_one_copy_save(first))
+    return copy_is_valid(second) ? second : NULL;
+  if (!copy_is_valid(second))
+    return first;
+  if (first->version != SAVE_VERSION)
+    return second;
+
+  const int8_t ahead = (int8_t)(uint8_t)(second->generation - first->generation);
+  return ahead > 0 ? second : first;
+}
+
+/**
+ * Copies `record` over a copy in SRAM. Requires SRAM to be enabled.
+ *
+ * The magic's second byte is cleared first and written last, so the copy reads
+ * as invalid from the first write until the whole save is in place, and a power
+ * cut at any point leaves the slot's other copy as the newest valid one.
+ * @param dst Copy to overwrite.
+ */
+static void write_record(SaveGame *dst) {
+  uint8_t *d = (uint8_t *)dst;
+  const uint8_t *src = (const uint8_t *)&record;
+
+  sram_put(d + 1, 0);
+  for (uint16_t k = 2; k < sizeof(SaveGame); k++)
+    sram_put(d + k, src[k]);
+  sram_put(d, src[0]);
+  sram_put(d + 1, src[1]);
 }
 
 /**
@@ -216,15 +307,16 @@ static void sram_close(void) {
 
 bool save_slot_used(uint8_t slot) BANKED {
   sram_open();
-  const bool valid = slot_is_valid(slot);
+  const bool used = newest_copy(slot) != NULL;
   sram_close();
-  return valid;
+  return used;
 }
 
 const SaveGame *save_slot_open(uint8_t slot) BANKED {
   sram_open();
-  if (slot_is_valid(slot))
-    return sram_slot(slot);
+  const SaveGame *s = newest_copy(slot);
+  if (s)
+    return s;
 
   sram_close();
   return NULL;
@@ -238,9 +330,7 @@ bool save_write(uint8_t slot) BANKED {
   if (slot >= SAVE_SLOT_COUNT)
     return false;
 
-  sram_open();
-
-  SaveGame *s = sram_slot(slot);
+  SaveGame *s = &record;
 
   s->magic = SAVE_MAGIC;
   s->version = SAVE_VERSION;
@@ -259,9 +349,26 @@ bool save_write(uint8_t slot) BANKED {
   map_capture_state(s);
   capture_script_state(s);
 
-  s->checksum = checksum_of(s);
+  sram_open();
 
-  const bool ok = slot_is_valid(slot);
+  const SaveGame *newest = newest_copy(slot);
+  SaveGame *target = sram_copy(slot, 0);
+  if (newest == target)
+    target = sram_copy(slot, 1);
+
+  // A save from before the two copies has no generation; the byte after it is
+  // whatever SRAM held there.
+  if (!newest)
+    s->generation = 0;
+  else if (newest->version != SAVE_VERSION)
+    s->generation = 1;
+  else
+    s->generation = newest->generation + 1;
+  s->checksum = checksum_of(s, sizeof(SaveGame));
+
+  write_record(target);
+
+  const bool ok = newest_copy(slot) == target;
   sram_close();
 
   if (ok)
@@ -273,12 +380,11 @@ bool save_write(uint8_t slot) BANKED {
 bool save_load(uint8_t slot) BANKED {
   sram_open();
 
-  if (!slot_is_valid(slot)) {
+  const SaveGame *s = newest_copy(slot);
+  if (!s) {
     sram_close();
     return false;
   }
-
-  const SaveGame *s = sram_slot(slot);
 
   player = s->player;
 
@@ -314,8 +420,8 @@ bool save_load(uint8_t slot) BANKED {
 
 void save_apply_deferred(void) BANKED {
   sram_open();
-  if (slot_is_valid(active_save_slot)) {
-    const SaveGame *s = sram_slot(active_save_slot);
+  const SaveGame *s = newest_copy(active_save_slot);
+  if (s) {
     apply_script_state(s);
     map_apply_deferred_state(s);
   }
@@ -328,11 +434,22 @@ void save_erase(uint8_t slot) BANKED {
 
   sram_open();
 
-  // Clearing the magic is enough to retire the slot, but wiping it outright
+  // The older copy is invalidated before the newer one and both before either
+  // is wiped, so a power cut partway through leaves the slot holding the save
+  // it had or nothing, never the save before that.
+  SaveGame *newest = newest_copy(slot);
+  SaveGame *older = sram_copy(slot, newest == sram_copy(slot, 0) ? 1 : 0);
+  sram_put((uint8_t *)older + 1, 0);
+  if (newest)
+    sram_put((uint8_t *)newest + 1, 0);
+
+  // Clearing the magic is enough to retire a copy, but wiping it outright
   // keeps stale data from ever being resurrected by a checksum collision.
-  uint8_t *p = (uint8_t *)sram_slot(slot);
-  for (uint16_t k = 0; k < SAVE_SLOT_SIZE; k++, p++)
-    *p = 0;
+  for (uint8_t copy = 0; copy < SAVE_COPY_COUNT; copy++) {
+    uint8_t *p = (uint8_t *)sram_copy(slot, copy);
+    for (uint16_t k = 0; k < SAVE_SLOT_SIZE; k++, p++)
+      sram_put(p, 0);
+  }
 
   sram_close();
 }
