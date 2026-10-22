@@ -193,14 +193,17 @@ static void sram_put(uint8_t *p, uint8_t value) {
 }
 
 /**
- * Sums every byte of a save with the checksum field treated as zero.
+ * Sums the first `size` bytes of a save with the checksum field treated as
+ * zero.
  * @param s Save to sum.
+ * @param size Bytes to sum: `sizeof(SaveGame)`, or one fewer for a save from
+ *  before `generation` was added.
  * @return The 8-bit checksum.
  */
-static uint8_t checksum_of(const SaveGame *s) {
+static uint8_t checksum_of(const SaveGame *s, uint16_t size) {
   const uint8_t *p = (const uint8_t *)s;
   uint8_t sum = 0;
-  for (uint16_t k = 0; k < sizeof(SaveGame); k++, p++)
+  for (uint16_t k = 0; k < size; k++, p++)
     sum += *p;
   // Undo the contribution of the stored checksum byte so that the result is
   // independent of whatever is currently sitting in that field.
@@ -216,14 +219,38 @@ static bool copy_is_valid(const SaveGame *s) {
   if (s->magic != SAVE_MAGIC || s->version != SAVE_VERSION)
     return false;
 
-  return s->checksum == checksum_of(s);
+  return s->checksum == checksum_of(s, sizeof(SaveGame));
+}
+
+/**
+ * Compile time assertion that `SaveGame` is still version 4's layout plus
+ * `generation`. A layout change that raises `SAVE_VERSION` fails the build
+ * here, and must drop `is_one_copy_save` or carry those saves over field by
+ * field.
+ */
+typedef char one_copy_layout_matches[(SAVE_VERSION == 5) ? 1 : -1];
+
+/**
+ * Tests for a save from before each slot kept two copies. Requires SRAM to be
+ * enabled. Such a save has every field of `SaveGame` up to `generation`, which
+ * it lacks, so it loads as is. Only a slot's first copy can hold one.
+ * @param s Copy to test.
+ * @return `true` if the copy holds a valid version `SAVE_VERSION_ONE_COPY` save.
+ */
+static bool is_one_copy_save(const SaveGame *s) {
+  if (s->magic != SAVE_MAGIC || s->version != SAVE_VERSION_ONE_COPY)
+    return false;
+
+  return s->checksum == checksum_of(s, sizeof(SaveGame) - 1);
 }
 
 /**
  * Finds the copy of a slot to read. Requires SRAM to be enabled.
  *
  * Generations wrap, so the newer copy is the one whose count is less than half
- * the counter's range ahead of the other's: 0 is newer than 255.
+ * the counter's range ahead of the other's: 0 is newer than 255. A save from
+ * before the two copies is older than any copy beside it, since the first save
+ * over it goes to the second copy.
  * @param slot Slot to search.
  * @return The newer of the slot's valid copies, or `NULL` if neither is valid.
  */
@@ -233,10 +260,12 @@ static SaveGame *newest_copy(uint8_t slot) {
 
   SaveGame *first = sram_copy(slot, 0);
   SaveGame *second = sram_copy(slot, 1);
-  if (!copy_is_valid(first))
+  if (!copy_is_valid(first) && !is_one_copy_save(first))
     return copy_is_valid(second) ? second : NULL;
   if (!copy_is_valid(second))
     return first;
+  if (first->version != SAVE_VERSION)
+    return second;
 
   const int8_t ahead = (int8_t)(uint8_t)(second->generation - first->generation);
   return ahead > 0 ? second : first;
@@ -327,8 +356,15 @@ bool save_write(uint8_t slot) BANKED {
   if (newest == target)
     target = sram_copy(slot, 1);
 
-  s->generation = newest ? newest->generation + 1 : 0;
-  s->checksum = checksum_of(s);
+  // A save from before the two copies has no generation; the byte after it is
+  // whatever SRAM held there.
+  if (!newest)
+    s->generation = 0;
+  else if (newest->version != SAVE_VERSION)
+    s->generation = 1;
+  else
+    s->generation = newest->generation + 1;
+  s->checksum = checksum_of(s, sizeof(SaveGame));
 
   write_record(target);
 

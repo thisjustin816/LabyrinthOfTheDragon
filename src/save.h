@@ -46,6 +46,13 @@
 #define SAVE_VERSION 5
 
 /**
+ * The `SAVE_VERSION` from before each slot kept two copies. Its layout is
+ * `SaveGame` without `generation`, and it sits where a slot's first copy does,
+ * so it still loads; see `is_one_copy_save` in `save.c`.
+ */
+#define SAVE_VERSION_ONE_COPY 4
+
+/**
  * A complete snapshot of a game in progress.
  *
  * Only one floor's worth of object state exists at a time: `set_active_floor`

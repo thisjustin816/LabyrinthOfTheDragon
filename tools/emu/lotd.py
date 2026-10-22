@@ -86,6 +86,10 @@ COPY_COUNT = 2
 SRAM_BANK_SIZE = 0x2000
 SAVE_MAGIC = 0x4C44
 SAVE_VERSION = 5
+# Saves from before each slot kept two copies: the layout without `generation`,
+# checksummed over the rest, in a slot's first copy only (src/save.c).
+ONE_COPY_VERSION = 4
+ONE_COPY_SIZE = SAVE_SIZE - 1
 OFF = dict(magic=0, version=2, checksum=3, player=4, inventory=51,
            flag_pages=59, play_seconds=91, floor_index=93, map_id=94,
            map_x=95, map_y=96, hero_direction=97, flags_chest_open=98,
@@ -104,15 +108,15 @@ POFF = dict(name=0, player_class=8, ability_flags=9, level=10, exp=11,
 PLAYER_SIZE = 47
 
 
-def checksum(blob):
-    s = sum(blob[:SAVE_SIZE]) - blob[OFF["checksum"]]
+def checksum(blob, size=SAVE_SIZE):
+    s = sum(blob[:size]) - blob[OFF["checksum"]]
     return s & 0xFF
 
 
-def fix_checksum(blob):
+def fix_checksum(blob, size=SAVE_SIZE):
     b = bytearray(blob)
     b[OFF["checksum"]] = 0
-    b[OFF["checksum"]] = sum(b[:SAVE_SIZE]) & 0xFF
+    b[OFF["checksum"]] = sum(b[:size]) & 0xFF
     return bytes(b)
 
 
@@ -155,13 +159,21 @@ def copy_is_valid(blob):
         and checksum(blob) == blob[OFF["checksum"]]
 
 
+def is_one_copy_save(blob):
+    return (blob[0] | (blob[1] << 8)) == SAVE_MAGIC and blob[2] == ONE_COPY_VERSION \
+        and checksum(blob, ONE_COPY_SIZE) == blob[OFF["checksum"]]
+
+
 def newest_copy(first, second):
     """0 or 1 for the copy src/save.c's newest_copy() reads, or None when
-    neither is valid. Generations wrap: 0 is newer than 255."""
-    if not copy_is_valid(first):
+    neither is valid. Generations wrap: 0 is newer than 255, and a save from
+    before the two copies is older than any copy."""
+    if not (copy_is_valid(first) or is_one_copy_save(first)):
         return 1 if copy_is_valid(second) else None
     if not copy_is_valid(second):
         return 0
+    if first[2] != SAVE_VERSION:
+        return 1
     ahead = (second[OFF["generation"]] - first[OFF["generation"]]) & 0xFF
     return 1 if 0 < ahead < 0x80 else 0
 

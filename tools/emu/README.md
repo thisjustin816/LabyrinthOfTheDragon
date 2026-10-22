@@ -106,7 +106,7 @@ numbered in the order they were written:
 | t59 | the file screen showing the build's version, the Makefile's major and minor version and the commits since it changed, at the bottom left in the hint gray, beside a saved file, after the erase prompt's YES box has covered it, and after B on hero select |
 | t60 | SELECT on the name entry labeling B2 to B8 and wrapping back to blank, and each start's first save holding that floor, a first run's level, the abilities, the torch, a key for each of its key-locked chests, and a first run's items, the keys and items worked out from the floors' sources |
 | t61 | a standing NPC walling off its tile and a hidden one letting the hero across, at floor 8's beholder, with the pathfinder routing the way the game does |
-| t62 | saves surviving bad SRAM and power cuts: random SRAM and a forged or old save reading as an empty file, the newer of a slot's two copies loading across the generation counter's wrap, and a cut after any write of a save or an erase leaving the save from before it |
+| t62 | saves surviving bad SRAM and power cuts: random SRAM and a forged save reading as an empty file, a version 4 save from before the two copies loading and moving into them, the newer of a slot's two copies loading across the generation counter's wrap, and a cut after any write of a save or an erase leaving the save from before it |
 | t63 | the stack's deepest point across saves, fights, and every floor's load, kept 256 bytes inside the Makefile's `STACK_RESERVE` |
 
 ### Pitfalls

@@ -1,7 +1,8 @@
 """T62 - saves surviving a power cut and bad SRAM: a boot from random SRAM, a
-forged save with a bad checksum, an old version's save, the newer of a slot's
-two copies winning across the generation counter's wrap, and a power cut after
-every write of a save and of an erase.
+forged save with a bad checksum, a version 4 save from before each slot kept
+two copies loading and moving into them, the newer of a slot's two copies
+winning across the generation counter's wrap, and a power cut after every
+write of a save and of an erase.
 
 A cut is simulated by hooking `sram_put` in src/save.c, which every write to
 a save goes through, and copying SRAM as it stood before each write. Each copy
@@ -82,14 +83,36 @@ chk("T62 a newer copy with a bad checksum is passed over for the older valid one
     load(g, 0) and g.pos() == (12, 15), g.pos())
 g.close()
 
+# --- a save from before each slot kept two copies -----------------------------
+# The byte after a version 4 save is whatever SRAM held. Read as a generation,
+# 0x80 would be far ahead of the 1 the next save writes.
+one_copy = bytearray(set_field(template, OFF["version"], ONE_COPY_VERSION))
+one_copy[OFF["generation"]] = 0x80
+one_copy = fix_checksum(bytes(one_copy), ONE_COPY_SIZE)
 g = Game(tag="t62d")
-g.set_slot(0, fix_checksum(set_field(template, OFF["version"], 4)))
+g.set_slot(0, one_copy)
 g.set_slot(1, template)
 assert g.boot_to_save_select()
 g.tick(10)
-chk("T62 a version 4 save reads as NEW GAME", g.slot_is_empty(0), g.slot_text(0).strip())
+chk("T62 a version 4 save shows on the file screen", not g.slot_is_empty(0), g.slot_text(0).strip())
 beside = g.slot_text(1).strip()
-chk("T62 and the slot beside it survives", not g.slot_is_empty(1) and load(g, 1) and g.pos() == (12, 16), beside)
+chk("T62 and the slot beside it still shows its save", not g.slot_is_empty(1), beside)
+chk("T62 the version 4 save loads where it was saved", load(g, 0) and g.pos() == (12, 16), g.pos())
+g.step("UP")
+g.wait_map_idle(200)
+menu_save(g, chk, "T62 a save over the version 4 save")
+chk("T62 that save goes to the second copy at generation 1 and leaves the version 4 save",
+    copy_is_valid(g.copy(0, 1)) and g.copy(0, 1)[OFF["generation"]] == 1 and g.copy(0, 0) == one_copy,
+    f"generation={g.copy(0, 1)[OFF['generation']]}")
+g = reboot_to_save_select(g, "t62d2")
+chk("T62 after a power cycle the new save loads", load(g, 0) and g.pos() == (12, 15), g.pos())
+menu_save(g, chk, "T62 the save after that")
+chk("T62 that one replaces the version 4 save, at generation 2",
+    copy_is_valid(g.copy(0, 0)) and g.copy(0, 0)[OFF["generation"]] == 2, g.copy(0, 0)[2])
+g.close()
+
+g = with_copies(bytes(SAVE_SIZE), one_copy, "t62d3")
+chk("T62 a version 4 save where a second copy goes reads as NEW GAME", g.slot_is_empty(0), g.slot_text(0).strip())
 g.close()
 
 # --- the newer copy, across the generation counter's wrap --------------------
