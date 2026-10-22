@@ -37,6 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.build.outputs.version }}
+      changelog: ${{ steps.notes.outputs.changelog }}
     env:
       # The toolchain the ROM is built with. Change the two together.
       GBDK_URL: https://github.com/gbdk-2020/gbdk-2020/releases/download/4.5.0/gbdk-linux64.tar.gz
@@ -65,6 +66,7 @@ jobs:
           fi
 
       - name: Write the release notes
+        id: notes
         env:
           # The notes are the changelog lines the change adds, so on a pull
           # request they preview what its merge would publish.
@@ -75,8 +77,10 @@ jobs:
           # A push that creates the branch has no earlier commit to compare with.
           git cat-file -e "$base^{commit}" 2>/dev/null || base=HEAD^
           ./tools/changelog2notes "$base" > "$RUNNER_TEMP/out/release-notes.md"
-          if [ ! -s "$RUNNER_TEMP/out/release-notes.md" ]; then
-            echo "::notice::CHANGELOG.md gained no lines, so the release notes will be GitHub's list of merged pull requests."
+          if [ -s "$RUNNER_TEMP/out/release-notes.md" ]; then
+            echo "changelog=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::CHANGELOG.md gained no lines, so the release notes will be the ROM's hash and GitHub's list of merged pull requests."
           fi
 
       - name: Install GBDK-2020
@@ -100,7 +104,28 @@ jobs:
           version="$(sed -n 's/^#define GAME_VERSION "\(.*\)"$/\1/p' src/version.h)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/out"
-          cp LabyrinthOfTheDragon.gbc "$RUNNER_TEMP/out/LabyrinthOfTheDragon-$version.gbc"
+          rom="LabyrinthOfTheDragon-$version.gbc"
+          cp LabyrinthOfTheDragon.gbc "$RUNNER_TEMP/out/$rom"
+          printf '\nSHA-256 of %s: `%s`\n' "$rom" "$(sha256sum < LabyrinthOfTheDragon.gbc | cut -d' ' -f1)" \
+            >> "$RUNNER_TEMP/out/release-notes.md"
+
+      - name: Rebuild from the committed tree
+        env:
+          GBDK_HOME: ${{ runner.temp }}/gbdk/
+          RELEASE: ${{ github.event_name == 'push' && '1' || '' }}
+        # A clone holds only what is committed, with the history the version
+        # counts. A ROM that differs from the one above was built from an
+        # untracked file, stale generated data, or a different tool.
+        run: |
+          git clone --quiet --no-local . "$RUNNER_TEMP/clean"
+          cd "$RUNNER_TEMP/clean"
+          git checkout --quiet --detach "$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
+          npm ci --ignore-scripts
+          make RELEASE="$RELEASE" > /dev/null
+          if ! cmp LabyrinthOfTheDragon.gbc "$GITHUB_WORKSPACE/LabyrinthOfTheDragon.gbc"; then
+            echo "::error::A build from a clean clone differs from the ROM this run built."
+            exit 1
+          fi
 
       - name: Print the manual
         run: |
@@ -134,11 +159,13 @@ jobs:
       - name: Publish the release
         env:
           VERSION: ${{ needs.build.outputs.version }}
+          CHANGELOG: ${{ needs.build.outputs.changelog }}
           GH_TOKEN: ${{ github.token }}
         run: |
           # GitHub's list of merged pull requests stands in when the push added
-          # no changelog lines.
-          if [ -s out/release-notes.md ]; then notes=(--notes-file out/release-notes.md); else notes=(--generate-notes); fi
+          # no changelog lines, after the notes file's line with the ROM's hash.
+          notes=(--notes-file out/release-notes.md)
+          if [ "$CHANGELOG" != true ]; then notes+=(--generate-notes); fi
           gh release create "$VERSION" "out/LabyrinthOfTheDragon-$VERSION.gbc" \
             out/LabyrinthOfTheDragon-manual.pdf \
             --repo "$GITHUB_REPOSITORY" \
