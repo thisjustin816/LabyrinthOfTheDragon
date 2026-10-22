@@ -11,8 +11,10 @@ reading the code, only by playing it.
 From the repo root:
 
 ```
-python3 -m venv tools/emu/.venv && tools/emu/.venv/bin/pip install pyboy pysdl2-dll Pillow
+python3 -m venv tools/emu/.venv && tools/emu/.venv/bin/pip install pyboy==2.7.0 pysdl2-dll Pillow
 ```
+
+The suites are checked against PyBoy 2.7.0.
 
 Pillow isn't a hard pyboy dependency, but every suite that calls `.shot()`
 needs it and fails hard without it. [Node](https://nodejs.org/) is needed too,
