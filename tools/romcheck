@@ -83,7 +83,7 @@ for (const [name, { start, size }] of areas) {
   if (size === 0 || address >= 0x8000) continue;
   if (bank >= banks)
     failures.push(`${name} is in bank ${bank}, past the ROM's ${banks} banks`);
-  const limit = bank === 0 && address < BANK_SIZE ? BANK_SIZE : 2 * BANK_SIZE;
+  const limit = bank === 0 ? BANK_SIZE : 2 * BANK_SIZE;
   if (end > limit)
     failures.push(`${name} in bank ${bank} ends at ${hex(end)}, past ${hex(limit)}`);
 }
