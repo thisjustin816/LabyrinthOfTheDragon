@@ -31,10 +31,11 @@ STACK_RESERVE=1024
 
 LCC = $(GBDK_HOME)bin/lcc
 # -Wi-e fails the link on any warning from the ROM's overlap and overflow
-# check, which otherwise exits 0 and leaves a corrupt ROM. -Wl-m writes the
-# map that tools/romcheck reads.
+# check, which otherwise exits 0 and leaves a corrupt ROM. -Wl-m -Wl-w write
+# the map tools/romcheck reads, in the wide layout a debug build also uses; the
+# narrow one cuts symbol names short.
 LCCFLAGS = -Wm-yC -Wm-yt$(CART_TYPE) -Wl-yo$(ROM_BANKS) -Wl-ya$(RAM_BANKS) \
-	-Wm-yn"$(ROM_TITLE)" -Wm-yp0x14C=$(ROM_VERSION) -Wi-e -Wl-m
+	-Wm-yn"$(ROM_TITLE)" -Wm-yp0x14C=$(ROM_VERSION) -Wi-e -Wl-m -Wl-w
 
 PNG2BIN := ./tools/png2bin
 TABLES2C := ./tools/tables2c
