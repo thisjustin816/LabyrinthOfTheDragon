@@ -8,7 +8,7 @@ Based on the original's main branch as of August 24, 2025: 1.0.5 Alpha, plus its
 
 ### Added
 
-- Saving ([#75](https://github.com/NesHacker/LabyrinthOfTheDragon/issues/75)). Three save files on the cartridge's battery-backed RAM, a SAVE command in the menu, and a file screen that shows the game's version and each hero's level, floor, and play time, and asks before erasing a file. The floors' doors, levers, and puzzles are saved along with the hero.
+- Saving ([#75](https://github.com/NesHacker/LabyrinthOfTheDragon/issues/75)). Three save files on the cartridge's battery-backed RAM, a SAVE command in the menu, and a file screen that shows the game's version and each hero's level, floor, and play time, and asks before erasing a file. The floors' doors, levers, and puzzles are saved along with the hero. Each file is kept twice, and a save writes over the older copy, so if the power goes off partway through saving, the file keeps the save from before.
 - A name for your hero, up to six letters, entered after choosing a class. The name the original gave that class's hero is filled in to start.
 - ITEMS in the menu, for drinking a Potion, Ether, or Elixir outside of battle ([#70](https://github.com/NesHacker/LabyrinthOfTheDragon/issues/70)).
 - QUIT in the menu, which returns to the title screen after asking first.
@@ -23,6 +23,7 @@ Based on the original's main branch as of August 24, 2025: 1.0.5 Alpha, plus its
 
 ### Changed
 
+- Files saved by v1.1.6 or an earlier release read as empty and can't be loaded, because each file now holds two copies.
 - The dragon's defeat plays out on the map. The door behind it opens, and the stairs beyond save the game as cleared and roll the credits. The ending can be replayed from the stairs.
 - The torch burns down one step at a time instead of on a clock, so standing still or reading a sign costs nothing. A full torch lasts 32 steps at any pace, and wandering monsters leave you alone for the first 31. On the clock it went out after about 20 steps of nonstop walking, and sooner if you stopped ([#80](https://github.com/NesHacker/LabyrinthOfTheDragon/issues/80)).
 - Fleeing depends on speed. At even AGL you get away half the time. Each point of AGL you have over the fastest monster still able to chase you adds 1 in 16, and each point it has over you takes 1 in 16 away, from 1 in 8 up to 7 in 8. A blinded or frightened monster can't chase, and if none can, you always get away. A monster that runs from you makes the same roll against your AGL ([#80](https://github.com/NesHacker/LabyrinthOfTheDragon/issues/80)).

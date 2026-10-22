@@ -12,14 +12,22 @@
 #define SAVE_SLOT_COUNT 3
 
 /**
- * Bytes reserved for each slot. Slots are placed at fixed strides so that
- * growing `SaveGame` never silently shifts the slots that follow it. A
+ * Copies of each slot. A save overwrites the slot's older copy, so a power cut
+ * partway through leaves the newer one whole.
+ */
+#define SAVE_COPY_COUNT 2
+
+/**
+ * Bytes reserved for each copy. Copies are placed at fixed strides so that
+ * growing `SaveGame` never silently shifts the copies that follow it. A
  * compile time assertion in `save.c` enforces `sizeof(SaveGame) <= this`.
  */
 #define SAVE_SLOT_SIZE 512
 
 /**
- * Base address of cartridge SRAM (all slots live in SRAM bank 0).
+ * Base address of cartridge SRAM (every copy lives in SRAM bank 0). Each slot's
+ * first copy sits at `slot * SAVE_SLOT_SIZE`, and its second copy follows the
+ * first copies of all the slots.
  */
 #define SAVE_SRAM_BASE 0xA000u
 
@@ -35,7 +43,7 @@
  * `SaveGame` (or of `Player`) changes.
  */
 #define SAVE_MAGIC 0x4C44u
-#define SAVE_VERSION 4
+#define SAVE_VERSION 5
 
 /**
  * A complete snapshot of a game in progress.
@@ -126,6 +134,12 @@ typedef struct SaveGame {
    * and is wiped by `reset_map_objects`.
    */
   TileOverrideHashEntry overrides[TILE_HASHTABLE_SIZE];
+
+  /**
+   * Counts the saves written to the slot, wrapping at 256. The copy with the
+   * higher count is the newer one; see `newest_copy` in `save.c`.
+   */
+  uint8_t generation;
 } SaveGame;
 
 /**
@@ -135,15 +149,16 @@ typedef struct SaveGame {
 extern uint8_t active_save_slot;
 
 /**
- * @return `true` if the slot holds a valid, current-version game.
+ * @return `true` if either of the slot's copies holds a valid, current-version
+ *  game.
  * @param slot Slot to test.
  */
 bool save_slot_used(uint8_t slot) BANKED;
 
 /**
- * Opens a slot for reading, for the save select screen. SRAM is memory mapped,
- * so this hands back a pointer into it rather than copying a 446-byte save
- * into scarce work RAM. SRAM is left enabled; the caller must pair every
+ * Opens a slot's newer copy for reading, for the save select screen. SRAM is
+ * memory mapped, so this hands back a pointer into it rather than copying the
+ * save out. SRAM is left enabled; the caller must pair every
  * successful call with `save_slot_close()` and must not hold the pointer past
  * that.
  * @param slot Slot to read.
@@ -166,14 +181,15 @@ void save_slot_close(void) BANKED;
 void save_new_game(void) BANKED;
 
 /**
- * Writes the live game state to a slot.
+ * Writes the live game state over the slot's older copy, leaving the newer one
+ * untouched.
  * @param slot Slot to write.
  * @return `true` on success.
  */
 bool save_write(uint8_t slot) BANKED;
 
 /**
- * Restores a slot into the live game state. On success the caller must bring up
+ * Restores a slot's newer copy into the live game state. On success the caller must bring up
  * the map graphics with `init_world_map()` and set `game_state`.
  * @param slot Slot to load.
  * @return `true` on success. The live state is untouched on failure.
@@ -181,7 +197,7 @@ bool save_write(uint8_t slot) BANKED;
 bool save_load(uint8_t slot) BANKED;
 
 /**
- * Clears a slot.
+ * Clears both of a slot's copies.
  * @param slot Slot to erase.
  */
 void save_erase(uint8_t slot) BANKED;
